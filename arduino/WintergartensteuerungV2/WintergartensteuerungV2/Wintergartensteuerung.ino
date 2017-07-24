@@ -2,6 +2,7 @@
 //V2.005
 // Enable debug prints to serial monitor
 #define MY_DEBUG
+#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
 // Enable RS485 transport layer
 #define MY_RS485
 // Define this to enables DE-pin management on defined pin
@@ -10,35 +11,39 @@
 #define MY_RS485_BAUD_RATE 9600
 #define MY_NODE_ID 118
 #define MY_TRANSPORT_WAIT_READY_MS 3000
-#include <MySensors.h>
 #include <Arduino.h>
 #include <SPI.h>
 #include <Bounce2.h>
 #include <Wgs.h>
 // For RTC
 #include "Wire.h"
+#include <MySensors.h>
+
 #define DS3231_I2C_ADDRESS 0x68
 
 #define CHILD_ID_LIGHT 0
-#define CHILD_ID_Rain 1   // Id of the sensor child
-#define CHILD_ID_MARKDWN 2
-#define CHILD_ID_MARKUP 3
-#define CHILD_ID_MARKRAIN 4
-#define CHILD_ID_JALDWN 5
-#define CHILD_ID_JALUP 6
-#define CHILD_ID_CONFIG1 102 // Id for Jal-settings
-//CHILD_ID_SERVO
+#define CHILD_ID_COVER1 1
+#define CHILD_ID_COVER2 2 //MARKUP 3
+#define CHILD_ID_Rain 3   // Id of the sensor child
+//#define CHILD_ID_MARKRAIN 4
+//#define CHILD_ID_JALDWN 5
+//#define CHILD_ID_JALUP 6
+#define CHILD_ID_CONFIG_COVER1 102 // Id for Jal-settings
+#define CHILD_ID_CONFIG_COVER2 103 // Id for Jal-settings
 
+//für die millis()-Berechnung, wann wieder gesendet werden soll
 unsigned long SEND_FREQUENCY = 180000; // Sleep time between reads (in milliseconds)
+unsigned long lastSend = 0;
 
 // Initialize motion message
 MyMessage msgRain(CHILD_ID_Rain, V_RAIN);
 #define DIGITAL_INPUT_SENSOR 3   // The digital input you attached your rain sensor.  (Only 2 and 3 generates interrupt!)
 #define SENSOR_INTERRUPT DIGITAL_INPUT_SENSOR-2 // Usually the interrupt = pin -2 (on uno/nano anyway)
 
-MyMessage msgMarkise1(CHILD_ID_MARKISE1, V_DIMMER);
-
-
+MyMessage msgUp(CHILD_ID_COVER1,V_UP);                         // Message for Up 
+MyMessage msgDown(CHILD_ID_COVER1,V_DOWN);                     // Message for Down 
+MyMessage msgStop(CHILD_ID_COVER1,V_STOP);                     // Message for Stop 
+MyMessage msgShutterPosition(CHILD_ID_COVER1,V_PERCENTAGE);    // Message for % shutter 
 
 // Buttons
 Bounce debounceJalUp    = Bounce();
@@ -55,20 +60,7 @@ Bounce debounceMarkDown  = Bounce();
 #define BT_PRESS_MarkDown         5                   //
 #define BT_PRESS_MarkEmergency    6                   //
 
-
-
-//unsigned long SEND_FREQUENCY =    20000; // Minimum time between send (in milliseconds). We don't wnat to spam the gateway.
-double ppwh = ((double)PULSE_FACTOR)/1000; // Pulses per watt hour
-bool pcReceived = false;
-volatile unsigned long pulseCount = 0;
-volatile unsigned long lastBlink = 0;
-volatile unsigned long watt = 0;
-unsigned long oldPulseCount = 0;
-unsigned long oldWatt = 0;
-double oldKwh;
-unsigned long lastSend;
-
-int timeOfLastChange = 8;
+//int timeOfLastChange = 8;
 
 // Input Pins for Switch Markise Up/Down
 const int SwMarkUp = 8;
@@ -123,7 +115,7 @@ void before() {
   pinMode(DIGITAL_INPUT_SENSOR, INPUT_PULLUP);
   digitalWrite(DIGITAL_INPUT_SENSOR, HIGH);
   pulseCount = oldPulseCount = 0;
-  attachInterrupt(SENSOR_INTERRUPT, onPulse, FALLING);
+  attachInterrupt(SENSOR_INTERRUPT, onPulse, CHANGE); //Unterstellt, es soll nur ein ja/nein-Signal sein
 
   // Initialize In-/Outputs
   pinMode(SwMarkUp, INPUT_PULLUP);
@@ -170,64 +162,31 @@ void presentation()  {
   // Register all sensors to gateway (they will be created as child devices)
   present(CHILD_ID_LIGHT, S_LIGHT_LEVEL);
   present(CHILD_ID_Rain, S_RAIN);
-  present(CHILD_ID_MARKISE1, S_COVER);
-  present(CHILD_ID_CONFIG1, S_CUSTOM);
-
+  present(CHILD_ID_COVER1, S_COVER); //Markise
+  present(CHILD_ID_COVER2, S_COVER); //Jalousie
+  present(CHILD_ID_CONFIG_COVER1, S_CUSTOM);
+  present(CHILD_ID_CONFIG_COVER2, S_CUSTOM);
 
 }
-
-
-
 
 
 void loop()
 {
 //Serial.print("Loop/");
-    #ifdef MY_OTA_FIRMWARE_FEATURE
-    #endif
+   
 unsigned long currentTime = millis();
 
   // Only send values at a maximum frequency or woken up from sleep
   if (currentTime - lastSend > SEND_FREQUENCY)
   {
     lastSend = currentTime;
-    if (flow != oldflow) {
-      oldflow = flow;
+/*Hier einfügen:
+Miss und Sende den aktuellen Lichtlevel
+Miss und sende den aktuellen Regenstatus (sofern nicht nur Digital ja/nein); das wäre in der ISR aufgehoben bzw. */
 #ifdef MY_DEBUG_LOCAL
       Serial.print("l/min:");
       Serial.println(flow);
 #endif
-      // Check that we dont get unresonable large flow value.
-      // could hapen when long wraps or false interrupt triggered
-      if (flow < ((unsigned long)MAX_FLOW)) {
-        send(flowMsg.set(flow, 2));                   // Send flow value to gw
-      }
-    }
-
-    // No Pulse count received in 2min
-    if (currentTime - lastPulse > 120000) {
-      flow = 0;
-    }
-
-    // Pulse count has changed
-    if (pulseCount != oldPulseCount) {
-      oldPulseCount = pulseCount;
-#ifdef MY_DEBUG_LOCAL
-      Serial.print("pulsecnt:");
-      Serial.println(pulseCount);
-#endif
-      send(lastCounterMsg.set(pulseCount));                  // Send  pulsecount value to gw in VAR1
-
-      double volume = ((double)pulseCount / ((double)PULSE_FACTOR));
-      if (volume != oldvolume) {
-        oldvolume = volume;
-#ifdef MY_DEBUG_LOCAL
-        Serial.print("vol:");
-        Serial.println(volume, 3);
-#endif
-        send(volumeMsg.set(volume, 3));               // Send volume value to gw
-      }
-    }
   }
 
     // Read buttons, interface
@@ -239,9 +198,13 @@ unsigned long currentTime = millis();
         //setPosition(100);
         MUp=true;
         MDown=false;
-        //send(msgUp.set(1), 1);
+        send(msgUp.setSensor(CHILD_ID_COVER1).set(1)); //sollte wohl nicht mit ACK-Anforderung gesendet werden
         mark.loop(MUp, MDown);
+#ifdef MY_DEBUG_LOCAL
         Serial.print("Mup/");
+#endif
+
+        
         break;
 
       case BT_PRESS_MarkDown:
