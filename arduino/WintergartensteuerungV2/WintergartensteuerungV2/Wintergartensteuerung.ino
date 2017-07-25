@@ -14,20 +14,15 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Bounce2.h>
-#include <Wgs.h>
-// For RTC
-#include "Wire.h"
+#include <Wgs.h> //WintergartenLiB
+#include "Wire.h" // For RTC
+#define DS3231_I2C_ADDRESS 0x68 // For RTC
 #include <MySensors.h>
-
-#define DS3231_I2C_ADDRESS 0x68
 
 #define CHILD_ID_LIGHT 0
 #define CHILD_ID_COVER1 1
 #define CHILD_ID_COVER2 2 //MARKUP 3
 #define CHILD_ID_Rain 3   // Id of the sensor child
-//#define CHILD_ID_MARKRAIN 4
-//#define CHILD_ID_JALDWN 5
-//#define CHILD_ID_JALUP 6
 #define CHILD_ID_CONFIG_COVER1 102 // Id for Jal-settings
 #define CHILD_ID_CONFIG_COVER2 103 // Id for Jal-settings
 
@@ -40,10 +35,14 @@ MyMessage msgRain(CHILD_ID_Rain, V_RAIN);
 #define DIGITAL_INPUT_SENSOR 3   // The digital input you attached your rain sensor.  (Only 2 and 3 generates interrupt!)
 #define SENSOR_INTERRUPT DIGITAL_INPUT_SENSOR-2 // Usually the interrupt = pin -2 (on uno/nano anyway)
 
-MyMessage msgUp(CHILD_ID_COVER1,V_UP);                         // Message for Up 
-MyMessage msgDown(CHILD_ID_COVER1,V_DOWN);                     // Message for Down 
-MyMessage msgStop(CHILD_ID_COVER1,V_STOP);                     // Message for Stop 
-MyMessage msgShutterPosition(CHILD_ID_COVER1,V_PERCENTAGE);    // Message for % shutter 
+MyMessage msgUp(CHILD_ID_COVER1,V_UP);                         // Message for Up
+MyMessage msgDown(CHILD_ID_COVER1,V_DOWN);                     // Message for Down
+MyMessage msgStop(CHILD_ID_COVER1,V_STOP);                     // Message for Stop
+MyMessage msgShutterPosition2(CHILD_ID_COVER1,V_PERCENTAGE);    // Message for % shutter
+MyMessage msgUp2(CHILD_ID_COVER2,V_UP);                         // Message for Up
+MyMessage msgDown2(CHILD_ID_COVER2,V_DOWN);                     // Message for Down
+MyMessage msgStop2(CHILD_ID_COVER2,V_STOP);                     // Message for Stop
+MyMessage msgShutterPosition2(CHILD_ID_COVER2,V_PERCENTAGE);    // Message for % shutter
 
 // Buttons
 Bounce debounceJalUp    = Bounce();
@@ -51,7 +50,6 @@ Bounce debounceJalDown  = Bounce();
 Bounce debounceMarkEmergency  = Bounce();
 Bounce debounceMarkUp    = Bounce();
 Bounce debounceMarkDown  = Bounce();
-
 #define BT_PRESS_None             0                   //
 #define BT_PRESS_JalUp            1                   //
 #define BT_PRESS_JalDown          2                   //
@@ -70,8 +68,6 @@ const int SwJalUp = 7;
 const int SwJalDown = 6;
 //Notfall
 const int SwEmergency = 5;
-
-
 // Output Pins
 const int JalUp = 10;
 const int JalDown = 11;
@@ -88,14 +84,12 @@ int EmergencyState = 0;
 
 //autostart
 const int autostart_time = 9;
-
 const int autostart_check_delay = 200; //in ticks
 int autostart_check_tick = 200; //in ticks
 boolean autostart_done = false;
 
 boolean MDown = false;
 boolean MUp = false;
-
 Wgs mark(MarkUp, MarkDown, 55000);
 Wgs jal(JalUp, JalDown, 65000);
 
@@ -148,12 +142,12 @@ void before() {
   Wire.begin();
 }
 
+
 void setup()
 {
-
   //  Serial.begin(57600);
-
 }
+
 
 void presentation()  {
   // Send the sketch version information to the gateway and Controller
@@ -166,14 +160,12 @@ void presentation()  {
   present(CHILD_ID_COVER2, S_COVER); //Jalousie
   present(CHILD_ID_CONFIG_COVER1, S_CUSTOM);
   present(CHILD_ID_CONFIG_COVER2, S_CUSTOM);
-
 }
 
 
 void loop()
 {
 //Serial.print("Loop/");
-   
 unsigned long currentTime = millis();
 
   // Only send values at a maximum frequency or woken up from sleep
@@ -204,7 +196,7 @@ Miss und sende den aktuellen Regenstatus (sofern nicht nur Digital ja/nein); das
         Serial.print("Mup/");
 #endif
 
-        
+
         break;
 
       case BT_PRESS_MarkDown:
