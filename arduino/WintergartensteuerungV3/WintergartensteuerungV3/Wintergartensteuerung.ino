@@ -70,6 +70,8 @@ MyMessage downMessage2(CHILD2_ID, V_DOWN);
 MyMessage stopMessage2(CHILD2_ID, V_STOP);
 MyMessage statusMessage2(CHILD2_ID, V_STATUS);
 
+
+//noch vereinfachen...
 void sendState() {
   // Send current state and status to gateway.
   send(upMessage.set(state == UP));
@@ -146,15 +148,30 @@ void loop() {
 
 
 void receive(const MyMessage &message) {
-  if (message.type == V_UP) {
-    // Set state to covering up and send it back to the gateway.
-    state = UP;
-    sendState();
-    Serial.println("Moving cover up.");
 
-    // Activate actuator until the sensor returns HIGH in loop().
-    digitalWrite(COVER_UP_ACTUATOR_PIN, HIGH);
+  if (message.sensor == CHILD2_ID) {
+      if (message.isAck()) {
+      Serial.println("Ack from gw rec.");
+    }
+    if (message.type == V_UP) {
+      // Set state to covering up and send it back to the gateway.
+      state = UP;
+      sendState();
+      Serial.println("Moving cover up.");
+
+      // Activate actuator until the sensor returns HIGH in loop().
+      digitalWrite(COVER_UP_ACTUATOR_PIN, HIGH);
+    }
+    //timeOfLastChange = millis();
   }
+
+
+
+
+
+
+
+
 
   if (message.type == V_DOWN) {
     // Set state to covering up and send it back to the gateway.
