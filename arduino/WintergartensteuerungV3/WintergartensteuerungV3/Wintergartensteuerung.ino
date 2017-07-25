@@ -33,8 +33,13 @@
 #define COVER_DOWN_SENSOR_PIN 5
 #define COVER2_UP_SENSOR_PIN 4
 #define COVER2_DOWN_SENSOR_PIN 5
-#define CHILD_ID 0
-#define CHILD2_ID 0
+
+#define CHILD_ID_LIGHT 0
+#define CHILD_ID 1
+#define CHILD2_ID 2
+#define CHILD_ID_Rain 3   // Id of the sensor child
+#define CHILD_ID_CONFIG_COVER 102
+#define CHILD2_ID_CONFIG_COVER 103
 
 
 // Internal representation of the cover state.
@@ -71,10 +76,10 @@ void sendState() {
   send(downMessage.set(state == DOWN));
   send(stopMessage.set(state == IDLE));
   send(statusMessage.set(status));
-  send(upMessage2.set(state == UP));
-  send(downMessage2.set(state == DOWN));
-  send(stopMessage2.set(state == IDLE));
-  send(statusMessage2.set(status));
+  send(upMessage2.set(state == UP2));
+  send(downMessage2.set(state == DOWN2));
+  send(stopMessage2.set(state == IDLE2));
+  send(statusMessage2.set(status2));
 
 }
 
@@ -89,13 +94,15 @@ void presentation() {
   sendSketchInfo(SN, SV);
   present(CHILD_ID, S_COVER);
   present(CHILD2_ID, S_COVER);
+  present(CHILD_ID_CONFIG_COVER, S_CUSTOM);
+  present(CHILD2_ID_CONFIG_COVER, S_CUSTOM);
 }
 
 void loop() {
-  if (!initial_state_sent) {
-    sendState();
-    initial_state_sent = true;
-  }
+  //if (!initial_state_sent) {
+  //  sendState();
+  //  initial_state_sent = true;
+  //}
 
   if (state == IDLE) {
     digitalWrite(COVER_UP_ACTUATOR_PIN, LOW);
