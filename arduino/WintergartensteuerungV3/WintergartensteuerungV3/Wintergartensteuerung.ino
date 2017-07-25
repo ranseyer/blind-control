@@ -104,6 +104,11 @@ void loop() {
     digitalWrite(COVER2_DOWN_ACTUATOR_PIN, LOW);
   }
 
+
+
+
+///// verdoppeln !  (StatusSchalter habe ich nicht !)
+
   if (state == UP && digitalRead(COVER_UP_SENSOR_PIN) == HIGH) {
     Serial.println("Cover is up.");
     // Update status and state; send it to the gateway.
@@ -129,6 +134,9 @@ void loop() {
 
 
 }
+
+//Hier muesste man entscheiden um welches Child es geht beim doppeln...
+
 
 void receive(const MyMessage &message) {
   if (message.type == V_UP) {
