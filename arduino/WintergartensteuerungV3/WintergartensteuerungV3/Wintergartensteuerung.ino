@@ -149,38 +149,58 @@ void loop() {
 
 void receive(const MyMessage &message) {
 
-  if (message.sensor == CHILD2_ID) {
+  if (message.sensor == CHILD_ID) {
       if (message.isAck()) {
-      Serial.println("Ack from gw rec.");
+      Serial.println("Ack child1 from gw rec.");
     }
     if (message.type == V_UP) {
       // Set state to covering up and send it back to the gateway.
       state = UP;
       sendState();
-      Serial.println("Moving cover up.");
+      Serial.println("Moving cover 1 up.");
 
       // Activate actuator until the sensor returns HIGH in loop().
-      digitalWrite(COVER_UP_ACTUATOR_PIN, HIGH);
+      digitalWrite(COVER2_UP_ACTUATOR_PIN, HIGH);
     }
-    //timeOfLastChange = millis();
+    if (message.type == V_DOWN) {
+      // Set state to covering up and send it back to the gateway.
+      state = DOWN;
+      sendState();
+      Serial.println("Moving cover 1 down.");
+
+      // Activate actuator until the sensor returns HIGH in loop().
+      digitalWrite(COVER2_DOWN_ACTUATOR_PIN, HIGH);
+    }
+   }
+  if (message.sensor == CHILD2_ID) {
+      if (message.isAck()) {
+      Serial.println("Ack child2 from gw rec.");
+    }
+    if (message.type == V_UP) {
+      // Set state to covering up and send it back to the gateway.
+      state = UP2;
+      sendState();
+      Serial.println("Moving cover 2 up.");
+
+      // Activate actuator until the sensor returns HIGH in loop().
+      digitalWrite(COVER2_UP_ACTUATOR_PIN, HIGH);
+    }
+    if (message.type == V_DOWN) {
+      // Set state to covering up and send it back to the gateway.
+      state = DOWN2;
+      sendState();
+      Serial.println("Moving cover 2 down.");
+
+      // Activate actuator until the sensor returns HIGH in loop().
+      digitalWrite(COVER2_DOWN_ACTUATOR_PIN, HIGH);
+    }
+
+    //nextimeOfLastChange = millis();
   }
 
 
 
 
-
-
-
-
-
-  if (message.type == V_DOWN) {
-    // Set state to covering up and send it back to the gateway.
-    state = DOWN;
-    sendState();
-    Serial.println("Moving cover down.");
-    // Activate actuator until the sensor returns HIGH in loop().
-    digitalWrite(COVER_DOWN_ACTUATOR_PIN, HIGH);
-  }
 
   if (message.type == V_STOP) {
     // Set state to idle and send it back to the gateway.
