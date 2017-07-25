@@ -21,18 +21,20 @@
 #define SN "DoubleCover"
 #define SV "0.0.1"
 
+
 // Actuators for moving the cover up and down respectively.
-#define COVER_UP_ACTUATOR_PIN 2
-#define COVER_DOWN_ACTUATOR_PIN 3
-#define COVER2_UP_ACTUATOR_PIN 2
-#define COVER2_DOWN_ACTUATOR_PIN 3
+#define COVER1_ON_ACTUATOR_PIN 10 // Jal (default)
+#define COVER1_DOWN_ACTUATOR_PIN 11
+#define COVER2_ON_ACTUATOR_PIN 13 // Mark (default#)
+#define COVER2_DOWN_ACTUATOR_PIN 14
 
 // Sensors for finding out when the cover has reached its up/down position.
 // These could be simple buttons or linear hall sensors.
-#define COVER_UP_SENSOR_PIN 4
-#define COVER_DOWN_SENSOR_PIN 5
-#define COVER2_UP_SENSOR_PIN 4
-#define COVER2_DOWN_SENSOR_PIN 5
+#define COVER1_UP_SW_PIN 7 // Jal
+#define COVER1_DOWN_SW_PIN 6
+#define COVER2_UP_SW_PIN 8 //Mark
+#define COVER2_DOWN_SW_PIN 9
+#define COVER2_EMERGENCY_SW_PIN 5
 
 #define CHILD_ID_LIGHT 0
 #define CHILD_ID 1
@@ -86,10 +88,10 @@ void sendState() {
 }
 
 void setup() {
-  pinMode(COVER_UP_SENSOR_PIN, INPUT);
-  pinMode(COVER_DOWN_SENSOR_PIN, INPUT);
-  pinMode(COVER2_UP_SENSOR_PIN, INPUT);
-  pinMode(COVER2_DOWN_SENSOR_PIN, INPUT);
+  pinMode(COVER1_UP_SW_PIN, INPUT);
+  pinMode(COVER1_DOWN_SW_PIN, INPUT);
+  pinMode(COVER2_UP_SW_PIN, INPUT);
+  pinMode(COVER2_DOWN_SW_PIN, INPUT);
 }
 
 void presentation() {
@@ -101,24 +103,22 @@ void presentation() {
 }
 
 void loop() {
-  //if (!initial_state_sent) {
-  //  sendState();
-  //  initial_state_sent = true;
-  //}
 
   if (state == IDLE) {
-    digitalWrite(COVER_UP_ACTUATOR_PIN, LOW);
-    digitalWrite(COVER_DOWN_ACTUATOR_PIN, LOW);
-    digitalWrite(COVER2_UP_ACTUATOR_PIN, LOW);
+    digitalWrite(COVER1_ON_ACTUATOR_PIN, LOW);
+    digitalWrite(COVER1_DOWN_ACTUATOR_PIN, LOW);
+    digitalWrite(COVER2_ON_ACTUATOR_PIN, LOW);
     digitalWrite(COVER2_DOWN_ACTUATOR_PIN, LOW);
   }
 
 
 
 
-///// verdoppeln !  (StatusSchalter habe ich nicht !)
 
-  if (state == UP && digitalRead(COVER_UP_SENSOR_PIN) == HIGH) {
+//
+///ggf verdoppeln !  (StatusSchalter habe ich nicht !)
+
+  /* if (state == UP && digitalRead(COVER1_ON_SENSOR_PIN) == HIGH) {
     Serial.println("Cover is up.");
     // Update status and state; send it to the gateway.
     status = 1;
@@ -127,7 +127,7 @@ void loop() {
     // Actuators will be disabled in next loop() iteration.
   }
 
-  if (state == DOWN && digitalRead(COVER_DOWN_SENSOR_PIN) == HIGH) {
+  if (state == DOWN && digitalRead(COVER1_DOWN_SENSOR_PIN) == HIGH) {
     Serial.println("Cover is down.");
     // Update status and state; send it to the gateway.
     status = 0;
@@ -135,17 +135,12 @@ void loop() {
     sendState();
     // Actuators will be disabled in next loop() iteration.
   }
-
-
-//verdoppeln
+*/
 
 
 
 
 }
-
-//Hier muesste man entscheiden um welches Child es geht beim doppeln...
-
 
 void receive(const MyMessage &message) {
 
@@ -160,7 +155,7 @@ void receive(const MyMessage &message) {
       Serial.println("Moving cover 1 up.");
 
       // Activate actuator until the sensor returns HIGH in loop().
-      digitalWrite(COVER2_UP_ACTUATOR_PIN, HIGH);
+      digitalWrite(COVER2_ON_ACTUATOR_PIN, HIGH);
     }
     if (message.type == V_DOWN) {
       // Set state to covering up and send it back to the gateway.
@@ -183,7 +178,7 @@ void receive(const MyMessage &message) {
       Serial.println("Moving cover 2 up.");
 
       // Activate actuator until the sensor returns HIGH in loop().
-      digitalWrite(COVER2_UP_ACTUATOR_PIN, HIGH);
+      digitalWrite(COVER2_ON_ACTUATOR_PIN, HIGH);
     }
     if (message.type == V_DOWN) {
       // Set state to covering up and send it back to the gateway.
@@ -197,8 +192,6 @@ void receive(const MyMessage &message) {
 
     //nextimeOfLastChange = millis();
   }
-
-
 
 
 
