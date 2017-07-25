@@ -10,7 +10,7 @@
 // Set RS485 baud rate to use
 #define MY_RS485_BAUD_RATE 9600
 #define MY_NODE_ID 118
-#define MY_TRANSPORT_WAIT_READY_MS 3000
+#define MY_TRANSPORT_WAIT_READY_MS 2000
 #include <Arduino.h>
 #include <SPI.h>
 #include <Bounce2.h>
@@ -103,6 +103,7 @@ void presentation() {
 }
 
 void loop() {
+Serial.println("V0.0.1 test");
 
   if (state == IDLE) {
     digitalWrite(COVER1_ON_ACTUATOR_PIN, LOW);
