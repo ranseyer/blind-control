@@ -18,28 +18,24 @@
 #include "Wire.h" // For RTC
 #define DS3231_I2C_ADDRESS 0x68 // For RTC
 #include <MySensors.h>
-/*
- * Documentation: http://www.mysensors.org
- * Support Forum: http://forum.mysensors.org
- */
-
-// Enable debug prints to serial monitor
-#define MY_DEBUG
-#define MY_RADIO_NRF24
-
-#include <MySensors.h>
-#define SN "Cover"
-#define SV "1.1"
+#define SN "DoubleCover"
+#define SV "0.0.1"
 
 // Actuators for moving the cover up and down respectively.
 #define COVER_UP_ACTUATOR_PIN 2
 #define COVER_DOWN_ACTUATOR_PIN 3
+#define COVER2_UP_ACTUATOR_PIN 2
+#define COVER2_DOWN_ACTUATOR_PIN 3
+
 // Sensors for finding out when the cover has reached its up/down position.
 // These could be simple buttons or linear hall sensors.
 #define COVER_UP_SENSOR_PIN 4
 #define COVER_DOWN_SENSOR_PIN 5
-
+#define COVER2_UP_SENSOR_PIN 4
+#define COVER2_DOWN_SENSOR_PIN 5
 #define CHILD_ID 0
+#define CHILD2_ID 0
+
 
 // Internal representation of the cover state.
 enum State {
@@ -47,14 +43,27 @@ enum State {
   UP, // Window covering. Up.
   DOWN, // Window covering. Down.
 };
+enum State2 {
+  IDLE2,
+  UP2, // Window covering. Up.
+  DOWN2, // Window covering. Down.
+};
 
 static int state = IDLE;
 static int status = 0; // 0=cover is down, 1=cover is up
 static bool initial_state_sent = false;
+static int State2 = IDLE;
+static int status2 = 0; // 0=cover is down, 1=cover is up
+static bool initial_state_sent2 = false;
+
 MyMessage upMessage(CHILD_ID, V_UP);
 MyMessage downMessage(CHILD_ID, V_DOWN);
 MyMessage stopMessage(CHILD_ID, V_STOP);
 MyMessage statusMessage(CHILD_ID, V_STATUS);
+MyMessage upMessage2(CHILD2_ID, V_UP);  /// V_UP ???
+MyMessage downMessage2(CHILD2_ID, V_DOWN);
+MyMessage stopMessage2(CHILD2_ID, V_STOP);
+MyMessage statusMessage2(CHILD2_ID, V_STATUS);
 
 void sendState() {
   // Send current state and status to gateway.
@@ -62,17 +71,24 @@ void sendState() {
   send(downMessage.set(state == DOWN));
   send(stopMessage.set(state == IDLE));
   send(statusMessage.set(status));
+  send(upMessage2.set(state == UP));
+  send(downMessage2.set(state == DOWN));
+  send(stopMessage2.set(state == IDLE));
+  send(statusMessage2.set(status));
+
 }
 
 void setup() {
   pinMode(COVER_UP_SENSOR_PIN, INPUT);
   pinMode(COVER_DOWN_SENSOR_PIN, INPUT);
+  pinMode(COVER2_UP_SENSOR_PIN, INPUT);
+  pinMode(COVER2_DOWN_SENSOR_PIN, INPUT);
 }
 
 void presentation() {
   sendSketchInfo(SN, SV);
-
   present(CHILD_ID, S_COVER);
+  present(CHILD2_ID, S_COVER);
 }
 
 void loop() {
@@ -84,6 +100,8 @@ void loop() {
   if (state == IDLE) {
     digitalWrite(COVER_UP_ACTUATOR_PIN, LOW);
     digitalWrite(COVER_DOWN_ACTUATOR_PIN, LOW);
+    digitalWrite(COVER2_UP_ACTUATOR_PIN, LOW);
+    digitalWrite(COVER2_DOWN_ACTUATOR_PIN, LOW);
   }
 
   if (state == UP && digitalRead(COVER_UP_SENSOR_PIN) == HIGH) {
@@ -103,6 +121,13 @@ void loop() {
     sendState();
     // Actuators will be disabled in next loop() iteration.
   }
+
+
+//verdoppeln
+
+
+
+
 }
 
 void receive(const MyMessage &message) {
