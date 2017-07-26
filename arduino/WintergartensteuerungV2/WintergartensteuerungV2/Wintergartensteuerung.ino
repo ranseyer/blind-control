@@ -256,6 +256,9 @@ mark.setDisable(emergency);
       }
     }
 
+delay(1000);                  // waits for a second
+
+
   }
 
 

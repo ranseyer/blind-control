@@ -209,7 +209,7 @@ void loop() {
           MDown=false;
           mark.loop(MUp, MDown);*/
           #ifdef MY_DEBUG_LOCAL
-          Serial.print("Mup/");
+          Serial.println("Mup");
           #endif
           break;
 
@@ -222,13 +222,13 @@ void loop() {
           digitalWrite(COVER1_DOWN_ACTUATOR_PIN, HIGH); */
 
           //send(msgDown.set(1), 1);
-          Serial.print("MDown/");
+          Serial.println("MDown");
           break;
 
 
                     case BT_PRESS_None:
                     state = IDLE;
-                          Serial.print("None/");
+                          Serial.println("NoButton");
                     break;
 
     //    case BT_PRESS_Stop:
@@ -239,13 +239,13 @@ void loop() {
 
 
 
-    // Read digital motion value
+    /* Read digital motion value
     bool tripped = digitalRead(DIGITAL_INPUT_SENSOR) == HIGH;
     Serial.println(tripped);
     send(msgRain.set(tripped?"0":"1"));  // Send tripped value to gw
 
     //displayTime();
-
+*/
 
   //  bool button_mark_up = digitalRead(SwMarkUp) == LOW;
   //  bool button_mark_down = digitalRead(SwMarkDown) == LOW;
@@ -253,10 +253,7 @@ void loop() {
   //  bool button_jal_down = digitalRead(SwJalDown) == LOW;
   bool emergency = digitalRead(EMERGENCY_SW_PIN) == LOW; //Current use: in case of rain
 
-
-
-
-
+  delay(500);                  // waits 
 
 }
 
