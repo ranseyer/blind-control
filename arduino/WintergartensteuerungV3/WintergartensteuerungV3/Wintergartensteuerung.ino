@@ -209,7 +209,7 @@ void loop() {
           MDown=false;
           mark.loop(MUp, MDown);*/
           #ifdef MY_DEBUG_LOCAL
-          Serial.println("Mup");
+          Serial.println("C1up");
           #endif
           break;
 
@@ -222,14 +222,14 @@ void loop() {
           digitalWrite(COVER1_DOWN_ACTUATOR_PIN, HIGH); */
 
           //send(msgDown.set(1), 1);
-          Serial.println("MDown");
+          Serial.println("C1down");
           break;
 
 
-                    case BT_PRESS_None:
-                    state = IDLE;
-                          Serial.println("NoButton");
-                    break;
+         case BT_PRESS_None:
+         state = IDLE;
+         Serial.println("NoButton");
+         break;
 
     //    case BT_PRESS_Stop:
     //      ShutterStop();
@@ -253,7 +253,7 @@ void loop() {
   //  bool button_jal_down = digitalRead(SwJalDown) == LOW;
   bool emergency = digitalRead(EMERGENCY_SW_PIN) == LOW; //Current use: in case of rain
 
-  delay(500);                  // waits 
+  delay(500);                  // waits
 
 }
 
