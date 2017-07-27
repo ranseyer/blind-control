@@ -14,7 +14,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Bounce2.h>
-//#include <Wgs.h> //WintergartenLiB
+#include <Wgs.h> //WintergartenLiB
 #include "Wire.h" // For RTC
 #define DS3231_I2C_ADDRESS 0x68 // For RTC
 #include <MySensors.h>
@@ -64,6 +64,30 @@ Bounce debounceCover2Down  = Bounce();
 #define BT_PRESS_Cover2Up           4                   //
 #define BT_PRESS_Cover2Down         5                   //
 #define BT_PRESS_Emergency          6                   //
+
+
+//autostart
+const int autostart_time = 9;
+const int autostart_check_delay = 200; //in ticks
+int autostart_check_tick = 200; //in ticks
+boolean autostart_done = false;
+
+boolean MDown = false;
+boolean MUp = false;
+
+// Pins übergeben ist blöd es wird ja bebounce genutzt...
+Wgs cover1(COVER1_UP_SW_PIN, COVER1_DOWN_SW_PIN, 55000);
+Wgs cover2(COVER2_UP_SW_PIN, COVER2_DOWN_SW_PIN, 65000);
+
+byte decToBcd(byte val)
+{
+  return( (val/10*16) + (val%10) );
+}
+// Convert binary coded decimal to normal decimal numbers
+byte bcdToDec(byte val)
+{
+  return( (val/16*10) + (val%16) );
+}
 
 
 
@@ -209,12 +233,12 @@ Deaktiviert, Aktion wird direkt beim Empfangen ausgeführt bzw. bei Button-Press
           //setPosition(100);
           //send(msgUp.setSensor(CHILD_ID_COVER1).set(1),3); //sollte wohl nicht mit ACK-Anforderung gesendet werden
           //digitalWrite(COVER1_ON_ACTUATOR_PIN, HIGH);
-          
+
           //Wenn es funktioniert, bitte die anderen cases entsprechend anpassen
           MUp=true;
           MDown=false;
-          mark.loop(MUp, MDown);
-          state1 = UP;
+          cover1.loop(MUp, MDown);
+          State[1] = UP;           //macht man das so ?
           sendState(1);
           #ifdef MY_DEBUG_LOCAL
             Serial.println("C1up");
@@ -235,7 +259,7 @@ Deaktiviert, Aktion wird direkt beim Empfangen ausgeführt bzw. bei Button-Press
 
 
          case BT_PRESS_None:
-         state = IDLE;
+         State[1] = IDLE;                          // richtig ?
          Serial.println("NoButton");
          break;
 
@@ -274,20 +298,20 @@ void receive(const MyMessage &message) {
     if (message.type == V_DIMMER) { // This could be M_ACK_VARIABLE or M_SET_VARIABLE
       int val = message.getInt();
       if (val < 50) {
-        state[1-1] = DOWN; //Array als Merkposten...
+        State[1-1] = DOWN; //Array als Merkposten...
         MUp=false;
         MDown=true;
-        mark.loop(MUp, MDown);
+        cover1.loop(MUp, MDown);
         sendState(1);
       }
-      elseif (val == 50) {
+      else if (val == 50) {
         //Stop-Befehle einfügen
       }
-      elseif (val >50) {
+      else if (val >50) {
        //UP-Befehle einfügen
-      } 
+      }
     }
-    
+
     /* deaktiviert, da FHEM das ohne Änderung der .pm noch nicht senden dürfte...
     if (message.type == V_UP) {
       // Set state to covering up and send it back to the gateway.
