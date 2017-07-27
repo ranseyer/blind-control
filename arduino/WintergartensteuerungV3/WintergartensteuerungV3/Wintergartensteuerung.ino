@@ -79,12 +79,12 @@ enum State2 {
   DOWN2, // Window covering. Down.
 };
 
-static int state1 = IDLE;
+static int State[] = {IDLE, IDLE};
+static int status[] = {0,0}; // 0=cover is down, 1=cover is up
+static bool initial_state_sent[] = {false,false};
+/*static int State2 = IDLE;
 static int status2 = 0; // 0=cover is down, 1=cover is up
-static bool initial_state_sent1 = false;
-static int State2 = IDLE;
-static int status2 = 0; // 0=cover is down, 1=cover is up
-static bool initial_state_sent2 = false;
+static bool initial_state_sent2 = false;*/
 
 MyMessage upMessage(CHILDCOVER1_ID, V_UP);
 MyMessage downMessage(CHILDCOVER1_ID, V_DOWN);
@@ -99,20 +99,21 @@ MyMessage msgLight(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
 
 
 //noch vereinfachen...
-void sendState1() {
+void sendState(int val1) {
   // Send current state and status to gateway.
-  send(upMessage.set(state1 == UP));
-  send(downMessage.set(state1 == DOWN));
-  send(stopMessage.set(state1 == IDLE));
-  send(statusMessage.set(status1));
+  send(upMessage.set(State[val1] == UP));
+  send(downMessage.set(State[val1] == DOWN));
+  send(stopMessage.set(State[val1] == IDLE));
+  send(statusMessage.set(status[val1]));
 }
-void sendState2() {
+
+/*void sendState2() {
   // Send current state and status to gateway.
-  send(upMessage2.set(state2 == UP2));
-  send(downMessage2.set(state2 == DOWN2));
-  send(stopMessage2.set(state2 == IDLE2));
+  send(upMessage2.set(State2 == UP2));
+  send(downMessage2.set(State2 == DOWN2));
+  send(stopMessage2.set(State2 == IDLE2));
   send(statusMessage2.set(status2));
-}
+}*/
 
 
 void before() {
@@ -166,7 +167,7 @@ void presentation() {
 
 void setup() {
   for (int i = 1; i < 2; i++) {
-    sendState[i]();
+    sendState(i);
     initial_state_sent[i] = true;
   }
 }
@@ -174,12 +175,15 @@ void setup() {
 
 void loop() {
 //Serial.println("V0.0.1 test");
-for (int i = 1; i < 2; i++) {
-  if (state[i] == IDLE) {
+/*
+Deaktiviert, Aktion wird direkt beim Empfangen ausgeführt bzw. bei Button-Press
+  for (int i = 1; i < 2; i++) {
+  if (state[i-1] == IDLE) {
     digitalWrite(COVER[i]_ON_ACTUATOR_PIN, HIGH);
     digitalWrite(COVER[i]_DOWN_ACTUATOR_PIN, HIGH);
     }
 }
+*/
 
   //Serial.print("Loop/");
   unsigned long currentTime = millis();
@@ -211,7 +215,7 @@ for (int i = 1; i < 2; i++) {
           MDown=false;
           mark.loop(MUp, MDown);
           state1 = UP;
-          sendState1();
+          sendState(1);
           #ifdef MY_DEBUG_LOCAL
             Serial.println("C1up");
           #endif
@@ -270,11 +274,11 @@ void receive(const MyMessage &message) {
     if (message.type == V_DIMMER) { // This could be M_ACK_VARIABLE or M_SET_VARIABLE
       int val = message.getInt();
       if (val < 50) {
-        state1l = DOWN;
+        state[1-1] = DOWN; //Array als Merkposten...
         MUp=false;
         MDown=true;
         mark.loop(MUp, MDown);
-        sendState();
+        sendState(1);
       }
       elseif (val == 50) {
         //Stop-Befehle einfügen
