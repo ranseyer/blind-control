@@ -47,8 +47,8 @@ unsigned long lastSend = 0;
 #define CHILDCOVER1_ID 1
 #define CHILDCOVER2_ID 2
 #define CHILD_ID_RAIN 3   // Id of the sensor child
-#define CHILDCOVER1_ID_CONFIG_COVER 102
-#define CHILDCOVER2_ID_CONFIG_COVER 103
+#define CHILDCOVER1_ID_CONFIG_COVER 2 //ChildID darf vermutlich auch identisch sein, es wird bei cover ja kein VARx genutzt
+#define CHILDCOVER2_ID_CONFIG_COVER 3 //dann ist alles "beieinander"
 
 
 // Buttons
@@ -68,7 +68,7 @@ Bounce debounceCover2Down  = Bounce();
 
 
 // Internal representation of the cover state.
-enum State {
+enum State1 {
   IDLE,
   UP, // Window covering. Up.
   DOWN, // Window covering. Down.
@@ -79,12 +79,12 @@ enum State2 {
   DOWN2, // Window covering. Down.
 };
 
-static int state = IDLE;
-static int status = 0; // 0=cover is down, 1=cover is up
-static bool initial_state_sent = false;
-static int State2 = IDLE;
+static int State[] = {IDLE, IDLE};
+static int status[] = {0,0}; // 0=cover is down, 1=cover is up
+static bool initial_state_sent[] = {false,false};
+/*static int State2 = IDLE;
 static int status2 = 0; // 0=cover is down, 1=cover is up
-static bool initial_state_sent2 = false;
+static bool initial_state_sent2 = false;*/
 
 MyMessage upMessage(CHILDCOVER1_ID, V_UP);
 MyMessage downMessage(CHILDCOVER1_ID, V_DOWN);
@@ -99,18 +99,21 @@ MyMessage msgLight(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
 
 
 //noch vereinfachen...
-void sendState() {
+void sendState(int val1) {
   // Send current state and status to gateway.
-  send(upMessage.set(state == UP));
-  send(downMessage.set(state == DOWN));
-  send(stopMessage.set(state == IDLE));
-  send(statusMessage.set(status));
-  send(upMessage2.set(state == UP2));
-  send(downMessage2.set(state == DOWN2));
-  send(stopMessage2.set(state == IDLE2));
-  send(statusMessage2.set(status2));
-
+  send(upMessage.set(State[val1] == UP));
+  send(downMessage.set(State[val1] == DOWN));
+  send(stopMessage.set(State[val1] == IDLE));
+  send(statusMessage.set(status[val1]));
 }
+
+/*void sendState2() {
+  // Send current state and status to gateway.
+  send(upMessage2.set(State2 == UP2));
+  send(downMessage2.set(State2 == DOWN2));
+  send(stopMessage2.set(State2 == IDLE2));
+  send(statusMessage2.set(status2));
+}*/
 
 
 void before() {
@@ -151,14 +154,6 @@ void before() {
   Wire.begin();
 }
 
-
-
-
-
-
-void setup() {
-}
-
 void presentation() {
   sendSketchInfo(SN, SV);
   present(CHILD_ID_LIGHT, S_LIGHT_LEVEL);
@@ -170,16 +165,25 @@ void presentation() {
 
 }
 
+void setup() {
+  for (int i = 1; i < 2; i++) {
+    sendState(i);
+    initial_state_sent[i] = true;
+  }
+}
+
+
 void loop() {
 //Serial.println("V0.0.1 test");
-
-  if (state == IDLE) {
-    digitalWrite(COVER1_ON_ACTUATOR_PIN, HIGH);
-    digitalWrite(COVER1_DOWN_ACTUATOR_PIN, HIGH);
-    digitalWrite(COVER2_ON_ACTUATOR_PIN, HIGH);
-    digitalWrite(COVER2_DOWN_ACTUATOR_PIN, HIGH);
-  }
-
+/*
+Deaktiviert, Aktion wird direkt beim Empfangen ausgeführt bzw. bei Button-Press
+  for (int i = 1; i < 2; i++) {
+  if (state[i-1] == IDLE) {
+    digitalWrite(COVER[i]_ON_ACTUATOR_PIN, HIGH);
+    digitalWrite(COVER[i]_DOWN_ACTUATOR_PIN, HIGH);
+    }
+}
+*/
 
   //Serial.print("Loop/");
   unsigned long currentTime = millis();
@@ -203,13 +207,17 @@ void loop() {
       switch (buttonPressed) {
         case BT_PRESS_Cover1Up:
           //setPosition(100);
-          //send(msgUp.setSensor(CHILD_ID_COVER1).set(1)); //sollte wohl nicht mit ACK-Anforderung gesendet werden
-          digitalWrite(COVER1_ON_ACTUATOR_PIN, HIGH);
-          /*          MUp=true;
+          //send(msgUp.setSensor(CHILD_ID_COVER1).set(1),3); //sollte wohl nicht mit ACK-Anforderung gesendet werden
+          //digitalWrite(COVER1_ON_ACTUATOR_PIN, HIGH);
+          
+          //Wenn es funktioniert, bitte die anderen cases entsprechend anpassen
+          MUp=true;
           MDown=false;
-          mark.loop(MUp, MDown);*/
+          mark.loop(MUp, MDown);
+          state1 = UP;
+          sendState(1);
           #ifdef MY_DEBUG_LOCAL
-          Serial.println("C1up");
+            Serial.println("C1up");
           #endif
           break;
 
@@ -263,6 +271,24 @@ void receive(const MyMessage &message) {
       if (message.isAck()) {
       Serial.println("Ack child1 from gw rec.");
     }
+    if (message.type == V_DIMMER) { // This could be M_ACK_VARIABLE or M_SET_VARIABLE
+      int val = message.getInt();
+      if (val < 50) {
+        state[1-1] = DOWN; //Array als Merkposten...
+        MUp=false;
+        MDown=true;
+        mark.loop(MUp, MDown);
+        sendState(1);
+      }
+      elseif (val == 50) {
+        //Stop-Befehle einfügen
+      }
+      elseif (val >50) {
+       //UP-Befehle einfügen
+      } 
+    }
+    
+    /* deaktiviert, da FHEM das ohne Änderung der .pm noch nicht senden dürfte...
     if (message.type == V_UP) {
       // Set state to covering up and send it back to the gateway.
       state = UP;
@@ -318,6 +344,7 @@ void receive(const MyMessage &message) {
 
     // Actuators will be switched off in loop().
   }
+  */
 }
 
 
