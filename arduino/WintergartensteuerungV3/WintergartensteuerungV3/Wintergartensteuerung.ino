@@ -1,3 +1,18 @@
+/*An sich spricht nichts dagegen, Deine lib zu verwenden, es wäre vermutlich sogar einfacher.
+
+- void sendState() sollte verdoppelt werden (2 Funktionen), für jedes COVER eine Funktion, für die 2. MEssages sollten auch die 2-er states herangezogen werden.
+
+- Das Zusammenspiel von sendState() und receive() scheint nicht klar zu sein. receive verarbeitet die Befehle, die von FHEM kommen (das aber nur Prozentwerte zurückgibt, anders als andere Controller). 
+Dort wieder ein sendState einzubauen, ist m.E. falsch.
+Zukünftig würde ich empfehlen, dort erst mal drei Fälle zu unterscheiden: 50=stop, <50=runter, >50=rauf; dafür kannst Du dieselben Befehle nehmen wie für die entsprechenden Tastendrücke.
+Zukünftig sollte man die Prozentwerte mit einer Laufzeit verkoppeln, dann könnte man die Position treffen, für weiteres wäre aber noch mehr Arbeit auch an der .pm zu tun.
+
+- Ansonsten würde ich in der loop() die Button-Befehle wieder aktivieren aus Deiner alten Steuerung, dazu dann den passenden State setzen und dann das jeweilige sendState(1|2)(), das macht die Info an FHEM und setzt eben alle drei Statusanzeigen in FHEM richtig).
+
+*/
+
+
+
 // (C) www.neuby.de
 //V3.001
 // Enable debug prints to serial monitor
