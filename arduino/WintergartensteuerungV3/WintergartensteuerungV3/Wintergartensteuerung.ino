@@ -90,6 +90,7 @@ enum State {
 int State[MAX_COVERS] = {0}; 
 int oldState[MAX_COVERS] = {0}; 
 int status[MAX_COVERS] = {0}; 
+int oldStatus[MAX_COVERS] = {0}; 
 
 //eine MyMessage-Funktion sollte ausreichen; Rest geht (hoffentlich) über Indexierung
 MyMessage upMessage(First_CHILD_ID_COVER, V_UP);  /// V_UP ???
@@ -217,6 +218,8 @@ void loop()
   for (int i = 0; i < MAX_COVERS; i++) {
     if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
 	sendState(i, First_CHILD_ID_COVER+i);
+	oldState[i] = State[i];
+	oldStatus[i] = status[i];    
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("Button pressed for Cover ");
 		Serial.println(i+First_CHILD_ID_COVER);
