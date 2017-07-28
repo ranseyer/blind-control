@@ -324,8 +324,7 @@ void displayTime()
 {
   byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
   // retrieve data from DS3231
-  readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month,
-  &year);
+  readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month,  &year);
   // send it to the serial monitor
   Serial.print(hour, DEC);
   // convert the byte variable to a decimal number when displayed
