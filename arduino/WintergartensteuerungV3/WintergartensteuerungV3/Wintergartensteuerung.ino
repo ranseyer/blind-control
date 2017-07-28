@@ -1,21 +1,5 @@
-/*An sich spricht nichts dagegen, Deine lib zu verwenden, es wäre vermutlich sogar einfacher.
+//V007
 
-- void sendState() sollte verdoppelt werden (2 Funktionen), für jedes COVER eine Funktion, für die 2. MEssages sollten auch die 2-er states herangezogen werden.
-
-- Das Zusammenspiel von sendState() und receive() scheint nicht klar zu sein. receive verarbeitet die Befehle, die von FHEM kommen (das aber nur Prozentwerte zurückgibt, anders als andere Controller). 
-Dort wieder ein sendState einzubauen, ist m.E. falsch.
-Zukünftig würde ich empfehlen, dort erst mal drei Fälle zu unterscheiden: 50=stop, <50=runter, >50=rauf; dafür kannst Du dieselben Befehle nehmen wie für die entsprechenden Tastendrücke.
-Zukünftig sollte man die Prozentwerte mit einer Laufzeit verkoppeln, dann könnte man die Position treffen, für weiteres wäre aber noch mehr Arbeit auch an der .pm zu tun.
-
-- Ansonsten würde ich in der loop() die Button-Befehle wieder aktivieren aus Deiner alten Steuerung, dazu dann den passenden State setzen und dann das jeweilige sendState(1|2)(), das macht die Info an FHEM und setzt eben alle drei Statusanzeigen in FHEM richtig).
-
-*/
-
-
-
-// (C) www.neuby.de
-//V3.001
-// Enable debug prints to serial monitor
 #define MY_DEBUG
 #define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
 // Enable RS485 transport layer
@@ -28,71 +12,64 @@ Zukünftig sollte man die Prozentwerte mit einer Laufzeit verkoppeln, dann könn
 #define MY_TRANSPORT_WAIT_READY_MS 2000
 #include <Arduino.h>
 #include <SPI.h>
-#include <Bounce2.h>
-#include <Wgs.h> //WintergartenLiB
-#include "Wire.h" // For RTC
-#define DS3231_I2C_ADDRESS 0x68 // For RTC
+#include <Wgs.h>
+//#include <Bounce2.h>
+// For RTC
+#include "Wire.h" //warum andere Schreibweise ?
+#define DS3231_I2C_ADDRESS 0x68
 #include <MySensors.h>
 #define SN "DoubleCover"
 #define SV "0.0.1"
 //für die millis()-Berechnung, wann wieder gesendet werden soll
 unsigned long SEND_FREQUENCY = 180000; // Sleep time between reads (in milliseconds)
 unsigned long lastSend = 0;
-
-// Actuators for moving the cover up and down respectively.
-#define COVER1_ON_ACTUATOR_PIN 10 // Jal (default)
-#define COVER1_DOWN_ACTUATOR_PIN 11
-#define COVER2_ON_ACTUATOR_PIN 13 // Mark (default#)
-#define COVER2_DOWN_ACTUATOR_PIN 14
-
-// Sensors for finding out when the cover has reached its up/down position.
-// These could be simple buttons or linear hall sensors.
-#define COVER1_UP_SW_PIN 7 // Jal
-#define COVER1_DOWN_SW_PIN 6
-#define COVER2_UP_SW_PIN 8 //Mark
-#define COVER2_DOWN_SW_PIN 9
-#define EMERGENCY_SW_PIN 5
+unsigned long DISPLAY_UPDATE_FREQUENCY = 300; // (in milliseconds)
+unsigned long lastUpdateDisplay = 0;
 
 // Initialize motion message
 #define DIGITAL_INPUT_SENSOR 3   // The digital input you attached your rain sensor.  (Only 2 and 3 generates interrupt!)
 #define SENSOR_INTERRUPT DIGITAL_INPUT_SENSOR-2 // Usually the interrupt = pin -2 (on uno/nano anyway)
 
+// Input Pins for Switch Markise Up/Down
+const int SwMarkUp = 8;
+const int SwMarkDown = 9;
+// Input Pins for Switch Jalosie Up/Down
+const int SwJalUp = 7;
+const int SwJalDown = 6;
+//Notfall
+const int SwEmergency = 5;
 
-#define CHILD_ID_LIGHT 0
-#define CHILDCOVER1_ID 1
-#define CHILDCOVER2_ID 2
-#define CHILD_ID_RAIN 3   // Id of the sensor child
-#define CHILDCOVER1_ID_CONFIG_COVER 2 //ChildID darf vermutlich auch identisch sein, es wird bei cover ja kein VARx genutzt
-#define CHILDCOVER2_ID_CONFIG_COVER 3 //dann ist alles "beieinander"
+// Output Pins
+const int JalOn = 10;
+const int JalDown = 11;
+const int JalRevers = 12;
+const int MarkOn = 13;
+const int MarkDown = 14;
 
-
-// Buttons
-Bounce debounceCover1Up    = Bounce();
-Bounce debounceCover1Down  = Bounce();
-Bounce debounceEmergency  = Bounce();
-Bounce debounceCover2Up    = Bounce();
-Bounce debounceCover2Down  = Bounce();
-#define BT_PRESS_None               0                   //
-#define BT_PRESS_Cover1Up           1                   //
-#define BT_PRESS_Cover1Down         2                   //
-#define BT_PRESS_Stop             3                   //
-#define BT_PRESS_Cover2Up           4                   //
-#define BT_PRESS_Cover2Down         5                   //
-#define BT_PRESS_Emergency          6                   //
-
+int MarkUpState = 0;
+int MarkDownState = 0;
+int JalUpState = 0;
+int JalDownState = 0;
+int JalReverseState = 0;
+int EmergencyState = 0;
 
 //autostart
 const int autostart_time = 9;
+
 const int autostart_check_delay = 200; //in ticks
 int autostart_check_tick = 200; //in ticks
 boolean autostart_done = false;
 
-boolean MDown = false;
-boolean MUp = false;
+#define CHILD_ID_LIGHT 0
+#define CHILD_ID_RAIN 1   // Id of the sensor child
+#define First_CHILD_ID_COVER 2
+#define Number_COVERS 2
+//#define CHILDCOVER1_ID_CONFIG_COVER 2 //ChildID darf vermutlich auch identisch sein, es wird bei cover ja kein VARx genutzt
+//#define CHILDCOVER2_ID_CONFIG_COVER 3 //dann ist alles "beieinander"
 
-// Pins übergeben ist blöd es wird ja bebounce genutzt...
-Wgs cover1(COVER1_UP_SW_PIN, COVER1_DOWN_SW_PIN, 55000);
-Wgs cover2(COVER2_UP_SW_PIN, COVER2_DOWN_SW_PIN, 65000);
+Wgs mark(MarkOn, MarkDown, 55000);
+Wgs jal(JalOn, JalDown, 55000);
+
 
 byte decToBcd(byte val)
 {
@@ -104,129 +81,90 @@ byte bcdToDec(byte val)
   return( (val/16*10) + (val%16) );
 }
 
-
-
-// Internal representation of the cover state.
-enum State1 {
+// Braucht es nur einmal...
+enum State {
   IDLE,
   UP, // Window covering. Up.
   DOWN, // Window covering. Down.
 };
-enum State2 {
-  IDLE2,
-  UP2, // Window covering. Up.
-  DOWN2, // Window covering. Down.
-};
+u_int State[Number_COVERS]=0; 
+u_int oldState[Number_COVERS]=0; 
 
-static int State[] = {IDLE, IDLE};
-static int status[] = {0,0}; // 0=cover is down, 1=cover is up
-static bool initial_state_sent[] = {false,false};
-/*static int State2 = IDLE;
-static int status2 = 0; // 0=cover is down, 1=cover is up
-static bool initial_state_sent2 = false;*/
 
-MyMessage upMessage(CHILDCOVER1_ID, V_UP);
-MyMessage downMessage(CHILDCOVER1_ID, V_DOWN);
-MyMessage stopMessage(CHILDCOVER1_ID, V_STOP);
-MyMessage statusMessage(CHILDCOVER1_ID, V_STATUS);
-MyMessage upMessage2(CHILDCOVER2_ID, V_UP);  /// V_UP ???
-MyMessage downMessage2(CHILDCOVER2_ID, V_DOWN);
-MyMessage stopMessage2(CHILDCOVER2_ID, V_STOP);
-MyMessage statusMessage2(CHILDCOVER2_ID, V_STATUS);
+//eine MyMessage-Funktion sollte ausreichen; Rest geht (hoffentlich) über Indexierung
+MyMessage upMessage(First_CHILD_ID_COVER, V_UP);  /// V_UP ???
+MyMessage downMessage2(First_CHILD_ID_COVER, V_DOWN);
+MyMessage stopMessage2(First_CHILD_ID_COVER, V_STOP);
+MyMessage statusMessage2(First_CHILD_ID_COVER, V_STATUS);
 MyMessage msgRain(CHILD_ID_RAIN, V_RAIN);
 MyMessage msgLight(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
 
 
-//noch vereinfachen...
-void sendState(int val1) {
+void sendState(int val1, int sensorID) {
   // Send current state and status to gateway.
-  send(upMessage.set(State[val1] == UP));
-  send(downMessage.set(State[val1] == DOWN));
-  send(stopMessage.set(State[val1] == IDLE));
-  send(statusMessage.set(status[val1]));
+  send(upMessage.setSensor(sensorID).set(State[val1] == UP));
+  send(downMessage.setSensor(sensorID).set(State[val1] == DOWN));
+  send(stopMessage.setSensor(sensorID).set(State[val1] == IDLE));
+  send(statusMessage.setSensor(sensorID).set(status[val1]));
 }
-
-/*void sendState2() {
-  // Send current state and status to gateway.
-  send(upMessage2.set(State2 == UP2));
-  send(downMessage2.set(State2 == DOWN2));
-  send(stopMessage2.set(State2 == IDLE2));
-  send(statusMessage2.set(status2));
-}*/
-
-
-void before() {
+ 
+void before() 
+{
   // Initialize In-/Outputs
-  pinMode(COVER1_UP_SW_PIN, INPUT_PULLUP);
-  pinMode(COVER1_DOWN_SW_PIN, INPUT_PULLUP);
-  pinMode(COVER2_UP_SW_PIN, INPUT_PULLUP);
-  pinMode(COVER2_DOWN_SW_PIN, INPUT_PULLUP);
-  pinMode(EMERGENCY_SW_PIN, INPUT_PULLUP);
-
+  pinMode(SwMarkUp, INPUT_PULLUP);
+  pinMode(SwMarkDown, INPUT_PULLUP);
+  pinMode(SwJalUp, INPUT_PULLUP);
+  pinMode(SwJalDown, INPUT_PULLUP);
+  pinMode(SwEmergency, INPUT_PULLUP);
+  pinMode(MarkOn, OUTPUT);
+  pinMode(MarkDown, OUTPUT);
+  pinMode(JalOn, OUTPUT);
+  pinMode(JalDown, OUTPUT);
+  digitalWrite(MarkOn, HIGH);
+  digitalWrite(MarkDown, HIGH);
+  digitalWrite(JalOn, HIGH);
+  digitalWrite(JalDown, HIGH);
   // initialize our digital pins internal pullup resistor so one pulse switches from high to low (less distortion)
   pinMode(DIGITAL_INPUT_SENSOR, INPUT_PULLUP);
   digitalWrite(DIGITAL_INPUT_SENSOR, HIGH);
   //pulseCount = oldPulseCount = 0;
   //attachInterrupt(SENSOR_INTERRUPT, onPulse, CHANGE); //Unterstellt, es soll nur ein ja/nein-Signal sein
 
-  pinMode(COVER1_ON_ACTUATOR_PIN, OUTPUT);
-  pinMode(COVER2_ON_ACTUATOR_PIN, OUTPUT);
-  pinMode(COVER1_DOWN_ACTUATOR_PIN, OUTPUT);
-  pinMode(COVER2_DOWN_ACTUATOR_PIN, OUTPUT);
-  digitalWrite(COVER1_ON_ACTUATOR_PIN, HIGH);
-  digitalWrite(COVER2_ON_ACTUATOR_PIN, HIGH);
-  digitalWrite(COVER1_DOWN_ACTUATOR_PIN, HIGH);
-  digitalWrite(COVER2_DOWN_ACTUATOR_PIN, HIGH);
-
-
-  // After setting up the button, setup debouncer
-  debounceCover1Up.attach(COVER1_UP_SW_PIN);
-  debounceCover1Up.interval(5);
-  debounceCover1Down.attach(COVER1_DOWN_SW_PIN);
-  debounceCover1Down.interval(5);
-  debounceCover2Up.attach(COVER2_UP_SW_PIN);
-  debounceCover2Up.interval(5);
-  debounceCover2Down.attach(COVER2_DOWN_SW_PIN);
-  debounceCover2Down.interval(5);
-  debounceEmergency.attach(EMERGENCY_SW_PIN);
-  debounceEmergency.interval(5);
   Wire.begin();
+  //Serial.begin(57600);
 }
 
 void presentation() {
   sendSketchInfo(SN, SV);
   present(CHILD_ID_LIGHT, S_LIGHT_LEVEL);
-  present(CHILDCOVER1_ID, S_COVER);
-  present(CHILDCOVER2_ID, S_COVER);
   present(CHILD_ID_RAIN, S_RAIN);
-  present(CHILDCOVER1_ID_CONFIG_COVER, S_CUSTOM);
-  present(CHILDCOVER2_ID_CONFIG_COVER, S_CUSTOM);
+  for (int i = 0; i < Number_COVERS; i++) {
+    present(First_CHILD_ID_COVER+i, S_COVER);
+    present(First_CHILD_ID_COVER+i, S_CUSTOM);
+  }
 
 }
 
 void setup() {
-  for (int i = 1; i < 2; i++) {
-    sendState(i);
-    initial_state_sent[i] = true;
+  for (int i = 0; i < Number_COVERS; i++) {
+    sendState(i, First_CHILD_ID_COVER+i);
   }
 }
 
-
-void loop() {
-//Serial.println("V0.0.1 test");
-/*
-Deaktiviert, Aktion wird direkt beim Empfangen ausgeführt bzw. bei Button-Press
-  for (int i = 1; i < 2; i++) {
-  if (state[i-1] == IDLE) {
-    digitalWrite(COVER[i]_ON_ACTUATOR_PIN, HIGH);
-    digitalWrite(COVER[i]_DOWN_ACTUATOR_PIN, HIGH);
-    }
-}
-*/
-
-  //Serial.print("Loop/");
-  unsigned long currentTime = millis();
-
+void loop()
+{
+	//Serial.print("Loop/");
+	unsigned long currentTime = millis();
+  
+    //böse
+    //delay (300);
+    if (currentTime - lastUpdateDisplay > DISPLAY_UPDATE_FREQUENCY)
+    {
+      lastUpdateDisplay = currentTime;
+	  displayTime();
+	}
+  
+  
     // Only send values at a maximum frequency or woken up from sleep
     if (currentTime - lastSend > SEND_FREQUENCY)
     {
@@ -240,69 +178,49 @@ Deaktiviert, Aktion wird direkt beim Empfangen ausgeführt bzw. bei Button-Press
   #endif
     }
 
-      // Read buttons, interface
-      uint8_t buttonPressed = 0;
-      buttonPressed = processButtons();
-      switch (buttonPressed) {
-        case BT_PRESS_Cover1Up:
-          //setPosition(100);
-          //send(msgUp.setSensor(CHILD_ID_COVER1).set(1),3); //sollte wohl nicht mit ACK-Anforderung gesendet werden
-          //digitalWrite(COVER1_ON_ACTUATOR_PIN, HIGH);
 
-          //Wenn es funktioniert, bitte die anderen cases entsprechend anpassen
-          MUp=true;
-          MDown=false;
-          cover1.loop(MUp, MDown);
-          State[1] = UP;           //macht man das so ?
-          sendState(1);
-          #ifdef MY_DEBUG_LOCAL
-            Serial.println("C1up");
-          #endif
-          break;
+  bool button_mark_up = digitalRead(SwMarkUp) == LOW;
+  bool button_mark_down = digitalRead(SwMarkDown) == LOW;
+  bool button_jal_up = digitalRead(SwJalUp) == LOW;
+  bool button_jal_down = digitalRead(SwJalDown) == LOW;  
+  bool emergency = digitalRead(SwEmergency) == LOW; //Current use: in case of rain
 
-        case BT_PRESS_Cover1Down:
-          //setPosition(0);
-/*          MDown=true;
-          MUp=false;
-          mark.loop(MUp, MDown);
-          digitalWrite(COVER1_ON_ACTUATOR_PIN, HIGH);
-          digitalWrite(COVER1_DOWN_ACTUATOR_PIN, HIGH); */
+  mark.setDisable(emergency);  
 
-          //send(msgDown.set(1), 1);
-          Serial.println("C1down");
-          break;
+  //Autostart code
+  autostart_check_tick++;
+  if(autostart_check_tick >= autostart_check_delay){
+    autostart_check_tick = 0;  
+    
+    
+    // Darf das mehrfach sein ?
+    byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
+    readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);
+    
 
 
-         case BT_PRESS_None:
-         State[1] = IDLE;                          // richtig ?
-         Serial.println("NoButton");
-         break;
+    if(autostart_done){ //Already done
+      if(hour > autostart_time){
+        autostart_done = false;
+      }
+    }else{
+      if(hour == autostart_time &! emergency){
+        button_mark_down = true;
+        autostart_done = true;
+      }
+    }
 
-    //    case BT_PRESS_Stop:
-    //      ShutterStop();
-    //      //send(msgStop.set(1), 1);
-    //      break;
-  }  //End of button loop
+  }
 
-
-
-    /* Read digital motion value
-    bool tripped = digitalRead(DIGITAL_INPUT_SENSOR) == HIGH;
-    Serial.println(tripped);
-    send(msgRain.set(tripped?"0":"1"));  // Send tripped value to gw
-
-    //displayTime();
-*/
-
-  //  bool button_mark_up = digitalRead(SwMarkUp) == LOW;
-  //  bool button_mark_down = digitalRead(SwMarkDown) == LOW;
-  //  bool button_jal_up = digitalRead(SwJalUp) == LOW;
-  //  bool button_jal_down = digitalRead(SwJalDown) == LOW;
-  bool emergency = digitalRead(EMERGENCY_SW_PIN) == LOW; //Current use: in case of rain
-
-  delay(500);                  // waits
-
+  state[0]=mark.loop(button_mark_up, button_mark_down);
+  state[1]=jal.loop(button_jal_up, button_jal_down);
+  for (int i = 0; i < Number_COVERS; i++) {
+    if ( State[i] == oldState[i]) {
+	sendState(i, First_CHILD_ID_COVER+i)
+	}	
+  }
 }
+
 
 void receive(const MyMessage &message) {
 
@@ -313,17 +231,25 @@ void receive(const MyMessage &message) {
     if (message.type == V_DIMMER) { // This could be M_ACK_VARIABLE or M_SET_VARIABLE
       int val = message.getInt();
       if (val < 50) {
-        State[1-1] = DOWN; //Array als Merkposten...
-        MUp=false;
-        MDown=true;
-        cover1.loop(MUp, MDown);
-        sendState(1);
+        //DOWN-Befehl einfügen
+#ifdef MY_DEBUG_LOCAL
+		Serial.print("GW Message down: ");
+		Serial.println(val);
+#endif		
       }
       else if (val == 50) {
         //Stop-Befehle einfügen
+#ifdef MY_DEBUG_LOCAL
+		Serial.print("GW Message stop: ");
+		Serial.println(val);
+#endif		
       }
       else if (val >50) {
        //UP-Befehle einfügen
+#ifdef MY_DEBUG_LOCAL
+		Serial.print("GW Message up: ");
+		Serial.println(val);
+#endif		
       }
     }
 
@@ -388,32 +314,58 @@ void receive(const MyMessage &message) {
 
 
 
-// Buttons auswerten
-uint8_t processButtons() {
-  uint8_t result = BT_PRESS_None;
-  if (debounceCover1Up.update()) {
-    // Button Up change detected
-    if (debounceCover1Up.fell()) {
-      result = BT_PRESS_Cover1Up;
-      Serial.println("Diag C1Up");
-    }
-    else result = BT_PRESS_Stop; // Button released
-    Serial.println("Diag Stop");
-  }
 
-  if (debounceCover1Down.update()) {
-    // Button Down change detected
-    if (debounceCover1Down.fell()){
-      result = BT_PRESS_Cover1Down;
-      Serial.println("Diag C1Dwn");
-    }
-    else result = BT_PRESS_Stop;
-  }
 
-/*  if (debounceStop.update()) {
-    // Button Stop change detected
-    if (debounceStop.fell()) result = BT_PRESS_STOP;
-  } */
 
-  return result;
+void readDS3231time(byte *second,
+byte *minute,
+byte *hour,
+byte *dayOfWeek,
+byte *dayOfMonth,
+byte *month,
+byte *year)
+{
+  Wire.beginTransmission(DS3231_I2C_ADDRESS);
+  Wire.write(0); // set DS3231 register pointer to 00h
+  Wire.endTransmission();
+  Wire.requestFrom(DS3231_I2C_ADDRESS, 7);
+  // request seven bytes of data from DS3231 starting from register 00h
+  *second = bcdToDec(Wire.read() & 0x7f);
+  *minute = bcdToDec(Wire.read());
+  *hour = bcdToDec(Wire.read() & 0x3f);
+  *dayOfWeek = bcdToDec(Wire.read());
+  *dayOfMonth = bcdToDec(Wire.read());
+  *month = bcdToDec(Wire.read());
+  *year = bcdToDec(Wire.read());
 }
+void displayTime()
+{
+  byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
+  // retrieve data from DS3231
+  readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month,
+  &year);
+  // send it to the serial monitor
+  Serial.print(hour, DEC);
+  // convert the byte variable to a decimal number when displayed
+  Serial.print(":");
+  if (minute<10)
+  {
+    Serial.print("0");
+  }
+  Serial.print(minute, DEC);
+  Serial.print(":");
+  if (second<10)
+  {
+    Serial.print("0");
+  }
+  Serial.print(second, DEC);
+  Serial.print(" ");
+  Serial.print(dayOfMonth, DEC);
+  Serial.print("/");
+  Serial.print(month, DEC);
+  Serial.print("/");
+  Serial.println(year, DEC);
+  
+
+}
+

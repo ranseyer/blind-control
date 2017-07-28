@@ -27,6 +27,14 @@ _disable = false;
 void Wgs::loop(bool button_disable, bool button_enable)
 {
 
+/*return values:
+0-100: %-Values 0=closed, 100=open
+101: idle
+102: stop
+103: up
+104: down
+200: nothing to do, filter them out in main loop()
+*/
 
 //debug("Loop. Button enable: "+button_enable);
 //debug("Button disable: "+button_disable);
@@ -34,7 +42,7 @@ void Wgs::loop(bool button_disable, bool button_enable)
 
 	if(_mute_time > millis()){
 debug("Muted");
-		return;
+		return 200;
 	}
 	
 	if(_disable){
@@ -45,13 +53,13 @@ debug("Detected rain!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	if(button_disable){
 		if(_state == STATE_DISABLED || _state == STATE_DISABLING){ //Already disabled/disabling
     debug("Already disabling/disabled");
-			return;
+			return 200;
 		}
 		if(_state == STATE_ENABLING){
     debug("Stop enabling");
 		_mute_time = millis() + 400;
 			stopMovement(STATE_UNKNOWN);
-			return;
+			return 102;
 		}
 		
     debug("Start disabling");
@@ -60,13 +68,13 @@ debug("Detected rain!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	}else if(button_enable){
 		if(_state == STATE_ENABLED || _state == STATE_ENABLING){ //Already enabled/enabling
     debug("Already enabling/enabled");
-			return;
+			return 200;
 		}
 		if(_state == STATE_DISABLING){
     debug("Stop disabling");
 		_mute_time = millis() + 400;
 			stopMovement(STATE_UNKNOWN);
-			return;
+			return; //Welcher Rückgabecode?
 		}
 		
     debug("Start enabling");
@@ -84,6 +92,7 @@ debug("Detected rain!!!!!!!!!!!!!!!!!!!!!!!!!!");
         stopMovement(STATE_ENABLED);
         break;
     }
+//Return value?!?
   }
 	
 }
