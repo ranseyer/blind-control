@@ -1,4 +1,4 @@
-//V007
+//V007.1
 
 #define MY_DEBUG
 #define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
@@ -87,8 +87,8 @@ enum State {
   UP, // Window covering. Up.
   DOWN, // Window covering. Down.
 };
-int State[Number_COVERS]=0; 
-int oldState[Number_COVERS]=0; 
+int State[Number_COVERS] = {0}; 
+int oldState[Number_COVERS] = {0}; 
 
 
 //eine MyMessage-Funktion sollte ausreichen; Rest geht (hoffentlich) über Indexierung
@@ -105,7 +105,7 @@ void sendState(int val1, int sensorID) {
   send(upMessage.setSensor(sensorID).set(State[val1] == UP));
   send(downMessage.setSensor(sensorID).set(State[val1] == DOWN));
   send(stopMessage.setSensor(sensorID).set(State[val1] == IDLE));
-  send(statusMessage.setSensor(sensorID).set(status[val1]));
+  //send(statusMessage.setSensor(sensorID).set(status[val1])); das Enablen wir wieder, wenn wir was zu senden haben...
 }
  
 void before() 
@@ -216,7 +216,7 @@ void loop()
   State[1]=jal.loop(button_jal_up, button_jal_down);
   for (int i = 0; i < Number_COVERS; i++) {
     if ( State[i] == oldState[i]) {
-	sendState(i, First_CHILD_ID_COVER+i)
+	sendState(i, First_CHILD_ID_COVER+i);
 	}	
   }
 }
@@ -224,7 +224,7 @@ void loop()
 
 void receive(const MyMessage &message) {
 
-  if (message.sensor == CHILDCOVER1_ID) {
+  if (message.sensor == First_CHILD_ID_COVER) {
       if (message.isAck()) {
       Serial.println("Ack child1 from gw rec.");
     }
