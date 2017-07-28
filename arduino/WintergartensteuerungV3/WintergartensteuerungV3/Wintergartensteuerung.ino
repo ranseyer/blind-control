@@ -63,7 +63,7 @@ boolean autostart_done = false;
 #define CHILD_ID_LIGHT 0
 #define CHILD_ID_RAIN 1   // Id of the sensor child
 #define First_CHILD_ID_COVER 2
-#define Number_COVERS 2
+#define MAX_COVERS 2
 //#define CHILDCOVER1_ID_CONFIG_COVER 2 //ChildID darf vermutlich auch identisch sein, es wird bei cover ja kein VARx genutzt
 //#define CHILDCOVER2_ID_CONFIG_COVER 3 //dann ist alles "beieinander"
 
@@ -87,9 +87,9 @@ enum State {
   UP, // Window covering. Up.
   DOWN, // Window covering. Down.
 };
-int State[Number_COVERS] = {0}; 
-int oldState[Number_COVERS] = {0}; 
-
+int State[MAX_COVERS] = {0}; 
+int oldState[MAX_COVERS] = {0}; 
+int status[MAX_COVERS] = {0}; 
 
 //eine MyMessage-Funktion sollte ausreichen; Rest geht (hoffentlich) über Indexierung
 MyMessage upMessage(First_CHILD_ID_COVER, V_UP);  /// V_UP ???
@@ -105,7 +105,7 @@ void sendState(int val1, int sensorID) {
   send(upMessage.setSensor(sensorID).set(State[val1] == UP));
   send(downMessage.setSensor(sensorID).set(State[val1] == DOWN));
   send(stopMessage.setSensor(sensorID).set(State[val1] == IDLE));
-  //send(statusMessage.setSensor(sensorID).set(status[val1])); das Enablen wir wieder, wenn wir was zu senden haben...
+  send(statusMessage.setSensor(sensorID).set(status[val1])); 
 }
  
 void before() 
@@ -138,7 +138,7 @@ void presentation() {
   sendSketchInfo(SN, SV);
   present(CHILD_ID_LIGHT, S_LIGHT_LEVEL);
   present(CHILD_ID_RAIN, S_RAIN);
-  for (int i = 0; i < Number_COVERS; i++) {
+  for (int i = 0; i < MAX_COVERS; i++) {
     present(First_CHILD_ID_COVER+i, S_COVER);
     present(First_CHILD_ID_COVER+i, S_CUSTOM);
   }
@@ -146,7 +146,7 @@ void presentation() {
 }
 
 void setup() {
-  for (int i = 0; i < Number_COVERS; i++) {
+  for (int i = 0; i < MAX_COVERS; i++) {
     sendState(i, First_CHILD_ID_COVER+i);
   }
 }
@@ -214,9 +214,13 @@ void loop()
 
   State[0]=mark.loop(button_mark_up, button_mark_down);
   State[1]=jal.loop(button_jal_up, button_jal_down);
-  for (int i = 0; i < Number_COVERS; i++) {
-    if ( State[i] == oldState[i]) {
+  for (int i = 0; i < MAX_COVERS; i++) {
+    if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
 	sendState(i, First_CHILD_ID_COVER+i);
+#ifdef MY_DEBUG_LOCAL
+		Serial.print("Button pressed for Cover ");
+		Serial.println(i+First_CHILD_ID_COVER);
+#endif
 	}	
   }
 }
@@ -224,7 +228,7 @@ void loop()
 
 void receive(const MyMessage &message) {
 
-  if (message.sensor == First_CHILD_ID_COVER) {
+  if (message.sensor == First_CHILD_ID_COVER||message.sensor == First_CHILD_ID_COVER+1 ) {
       if (message.isAck()) {
       Serial.println("Ack child1 from gw rec.");
     }
@@ -253,69 +257,44 @@ void receive(const MyMessage &message) {
       }
     }
 
-    /* deaktiviert, da FHEM das ohne Änderung der .pm noch nicht senden dürfte...
+    //deaktiviert, da FHEM das ohne Änderung der .pm noch nicht senden dürfte...
     if (message.type == V_UP) {
       // Set state to covering up and send it back to the gateway.
-      state = UP;
-      sendState();
+      State[message.sensor-First_CHILD_ID_COVER] = UP;
+      /*sendState();
       Serial.println("Moving cover 1 up.");
 
       // Activate actuator until the sensor returns HIGH in loop().
-      digitalWrite(COVER2_ON_ACTUATOR_PIN, HIGH);
+      digitalWrite(COVER2_ON_ACTUATOR_PIN, HIGH);*/
+#ifdef MY_DEBUG_LOCAL
+		Serial.print("GW Message up for Cover ");
+		Serial.println(message.sensor);
+#endif		
+	    
     }
     if (message.type == V_DOWN) {
       // Set state to covering up and send it back to the gateway.
-      state = DOWN;
-      sendState();
-      Serial.println("Moving cover 1 down.");
-
-      // Activate actuator until the sensor returns HIGH in loop().
-      digitalWrite(COVER2_DOWN_ACTUATOR_PIN, HIGH);
+      state[message.sensor-First_CHILD_ID_COVER] = DOWN;
+#ifdef MY_DEBUG_LOCAL
+		Serial.print("GW Message down for Cover ");
+		Serial.println(message.sensor);
+#endif		
     }
    }
-  if (message.sensor == CHILDCOVER2_ID) {
-      if (message.isAck()) {
-      Serial.println("Ack child2 from gw rec.");
-    }
-    if (message.type == V_UP) {
-      // Set state to covering up and send it back to the gateway.
-      state = UP2;
-      sendState();
-      Serial.println("Moving cover 2 up.");
-
-      // Activate actuator until the sensor returns HIGH in loop().
-      digitalWrite(COVER2_ON_ACTUATOR_PIN, HIGH);
-    }
-    if (message.type == V_DOWN) {
-      // Set state to covering up and send it back to the gateway.
-      state = DOWN2;
-      sendState();
-      Serial.println("Moving cover 2 down.");
-
-      // Activate actuator until the sensor returns HIGH in loop().
-      digitalWrite(COVER2_DOWN_ACTUATOR_PIN, HIGH);
-    }
-
+  
     //nextimeOfLastChange = millis();
   }
 
-
-
   if (message.type == V_STOP) {
     // Set state to idle and send it back to the gateway.
-    state = IDLE;
-    sendState();
-    Serial.println("Stopping cover.");
-
-    // Actuators will be switched off in loop().
+    state[message.sensor-First_CHILD_ID_COVER] = IDLE;
+#ifdef MY_DEBUG_LOCAL
+		Serial.print("GW Message stop for Cover ");
+		Serial.println(message.sensor);
+#endif		
   }
   */
 }
-
-
-
-
-
 
 void readDS3231time(byte *second,
 byte *minute,
