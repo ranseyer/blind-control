@@ -93,9 +93,9 @@ u_int oldState[Number_COVERS]=0;
 
 //eine MyMessage-Funktion sollte ausreichen; Rest geht (hoffentlich) über Indexierung
 MyMessage upMessage(First_CHILD_ID_COVER, V_UP);  /// V_UP ???
-MyMessage downMessage2(First_CHILD_ID_COVER, V_DOWN);
-MyMessage stopMessage2(First_CHILD_ID_COVER, V_STOP);
-MyMessage statusMessage2(First_CHILD_ID_COVER, V_STATUS);
+MyMessage downMessage(First_CHILD_ID_COVER, V_DOWN);
+MyMessage stopMessage(First_CHILD_ID_COVER, V_STOP);
+MyMessage statusMessage(First_CHILD_ID_COVER, V_STATUS);
 MyMessage msgRain(CHILD_ID_RAIN, V_RAIN);
 MyMessage msgLight(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
 
