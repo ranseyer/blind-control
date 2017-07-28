@@ -87,10 +87,10 @@ enum State {
   UP, // Window covering. Up.
   DOWN, // Window covering. Down.
 };
-int State[MAX_COVERS] = {0}; 
-int oldState[MAX_COVERS] = {0}; 
-int status[MAX_COVERS] = {0}; 
-int oldStatus[MAX_COVERS] = {0}; 
+int State[MAX_COVERS] = {0};
+int oldState[MAX_COVERS] = {0};
+int status[MAX_COVERS] = {0};
+int oldStatus[MAX_COVERS] = {0};
 
 //eine MyMessage-Funktion sollte ausreichen; Rest geht (hoffentlich) über Indexierung
 MyMessage upMessage(First_CHILD_ID_COVER, V_UP);  /// V_UP ???
@@ -106,10 +106,10 @@ void sendState(int val1, int sensorID) {
   send(upMessage.setSensor(sensorID).set(State[val1] == UP));
   send(downMessage.setSensor(sensorID).set(State[val1] == DOWN));
   send(stopMessage.setSensor(sensorID).set(State[val1] == IDLE));
-  send(statusMessage.setSensor(sensorID).set(status[val1])); 
+  send(statusMessage.setSensor(sensorID).set(status[val1]));
 }
- 
-void before() 
+
+void before()
 {
   // Initialize In-/Outputs
   pinMode(SwMarkUp, INPUT_PULLUP);
@@ -156,7 +156,7 @@ void loop()
 {
 	//Serial.print("Loop/");
 	unsigned long currentTime = millis();
-  
+
     //böse
     //delay (300);
     if (currentTime - lastUpdateDisplay > DISPLAY_UPDATE_FREQUENCY)
@@ -164,8 +164,8 @@ void loop()
       lastUpdateDisplay = currentTime;
 	  displayTime();
 	}
-  
-  
+
+
     // Only send values at a maximum frequency or woken up from sleep
     if (currentTime - lastSend > SEND_FREQUENCY)
     {
@@ -183,21 +183,21 @@ void loop()
   bool button_mark_up = digitalRead(SwMarkUp) == LOW;
   bool button_mark_down = digitalRead(SwMarkDown) == LOW;
   bool button_jal_up = digitalRead(SwJalUp) == LOW;
-  bool button_jal_down = digitalRead(SwJalDown) == LOW;  
+  bool button_jal_down = digitalRead(SwJalDown) == LOW;
   bool emergency = digitalRead(SwEmergency) == LOW; //Current use: in case of rain
 
-  mark.setDisable(emergency);  
+  mark.setDisable(emergency);
 
   //Autostart code
   autostart_check_tick++;
   if(autostart_check_tick >= autostart_check_delay){
-    autostart_check_tick = 0;  
-    
-    
+    autostart_check_tick = 0;
+
+
     // Darf das mehrfach sein ?
     byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
     readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);
-    
+
 
 
     if(autostart_done){ //Already done
@@ -219,12 +219,12 @@ void loop()
     if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
 	sendState(i, First_CHILD_ID_COVER+i);
 	oldState[i] = State[i];
-	oldStatus[i] = status[i];    
+	oldStatus[i] = status[i];
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("Button pressed for Cover ");
 		Serial.println(i+First_CHILD_ID_COVER);
 #endif
-	}	
+	}
   }
 }
 
@@ -242,21 +242,21 @@ void receive(const MyMessage &message) {
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("GW Message down: ");
 		Serial.println(val);
-#endif		
+#endif
       }
       else if (val == 50) {
         //Stop-Befehle einfügen
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("GW Message stop: ");
 		Serial.println(val);
-#endif		
+#endif
       }
       else if (val >50) {
        //UP-Befehle einfügen
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("GW Message up: ");
 		Serial.println(val);
-#endif		
+#endif
       }
     }
 
@@ -272,8 +272,8 @@ void receive(const MyMessage &message) {
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("GW Message up for Cover ");
 		Serial.println(message.sensor);
-#endif		
-	    
+#endif
+
     }
     if (message.type == V_DOWN) {
       // Set state to covering up and send it back to the gateway.
@@ -281,12 +281,12 @@ void receive(const MyMessage &message) {
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("GW Message down for Cover ");
 		Serial.println(message.sensor);
-#endif		
+#endif
     }
    }
-  
+
     //nextimeOfLastChange = millis();
-  }
+  //} //zu viel !
 
   if (message.type == V_STOP) {
     // Set state to idle and send it back to the gateway.
@@ -294,7 +294,7 @@ void receive(const MyMessage &message) {
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("GW Message stop for Cover ");
 		Serial.println(message.sensor);
-#endif		
+#endif
   }
 }
 
@@ -345,7 +345,6 @@ void displayTime()
   Serial.print(month, DEC);
   Serial.print("/");
   Serial.println(year, DEC);
-  
+
 
 }
-
