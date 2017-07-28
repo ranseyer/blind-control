@@ -87,8 +87,8 @@ enum State {
   UP, // Window covering. Up.
   DOWN, // Window covering. Down.
 };
-u_int State[Number_COVERS]=0; 
-u_int oldState[Number_COVERS]=0; 
+int State[Number_COVERS]=0; 
+int oldState[Number_COVERS]=0; 
 
 
 //eine MyMessage-Funktion sollte ausreichen; Rest geht (hoffentlich) über Indexierung
@@ -212,8 +212,8 @@ void loop()
 
   }
 
-  state[0]=mark.loop(button_mark_up, button_mark_down);
-  state[1]=jal.loop(button_jal_up, button_jal_down);
+  State[0]=mark.loop(button_mark_up, button_mark_down);
+  State[1]=jal.loop(button_jal_up, button_jal_down);
   for (int i = 0; i < Number_COVERS; i++) {
     if ( State[i] == oldState[i]) {
 	sendState(i, First_CHILD_ID_COVER+i)
