@@ -277,7 +277,7 @@ void receive(const MyMessage &message) {
     }
     if (message.type == V_DOWN) {
       // Set state to covering up and send it back to the gateway.
-      state[message.sensor-First_CHILD_ID_COVER] = DOWN;
+      State[message.sensor-First_CHILD_ID_COVER] = DOWN;
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("GW Message down for Cover ");
 		Serial.println(message.sensor);
@@ -290,13 +290,12 @@ void receive(const MyMessage &message) {
 
   if (message.type == V_STOP) {
     // Set state to idle and send it back to the gateway.
-    state[message.sensor-First_CHILD_ID_COVER] = IDLE;
+    State[message.sensor-First_CHILD_ID_COVER] = IDLE;
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("GW Message stop for Cover ");
 		Serial.println(message.sensor);
 #endif		
   }
-  */
 }
 
 void readDS3231time(byte *second,
