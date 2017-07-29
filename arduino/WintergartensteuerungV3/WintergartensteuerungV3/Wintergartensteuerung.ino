@@ -223,8 +223,10 @@ void loop()
       oldState[i] = State[i];
       oldStatus[i] = status[i];
 #ifdef MY_DEBUG_LOCAL
-      Serial.print("Button pressed for Cover ");
+      Serial.print("Button press C ");
       Serial.println(i+First_CHILD_ID_COVER);
+      Serial.print("Return: ");
+      Serial.println(State[i]);
 #endif
     }
   }
