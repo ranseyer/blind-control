@@ -26,9 +26,12 @@ unsigned long lastSend = 0;
 unsigned long DISPLAY_UPDATE_FREQUENCY = 300; // (in milliseconds)
 unsigned long lastUpdateDisplay = 0;
 
+/*
+ * Deaktiviert, da über loop() gelöst
 // Initialize motion message
 #define DIGITAL_INPUT_SENSOR 3   // The digital input you attached your rain sensor.  (Only 2 and 3 generates interrupt!)
 #define SENSOR_INTERRUPT DIGITAL_INPUT_SENSOR-2 // Usually the interrupt = pin -2 (on uno/nano anyway)
+*/
 
 // Input Pins for Switch Markise Up/Down
 const int SwMarkUp = 8;
@@ -338,6 +341,7 @@ byte *year)
   *month = bcdToDec(Wire.read());
   *year = bcdToDec(Wire.read());
 }
+
 void displayTime()
 {
   byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
