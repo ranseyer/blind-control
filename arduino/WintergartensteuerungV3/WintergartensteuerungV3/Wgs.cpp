@@ -24,7 +24,7 @@ _disable = false;
 }
 
 
-void Wgs::loop(bool button_disable, bool button_enable)
+int Wgs::loop(bool button_disable, bool button_enable)
 {
 
 /*return values:
