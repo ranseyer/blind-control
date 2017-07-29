@@ -12,7 +12,7 @@
 #define MY_TRANSPORT_WAIT_READY_MS 2000
 #include <Arduino.h>
 #include <SPI.h>
-#include <Wgs.h>
+#include "Wgs.h" //JR: Compilerfehler nach git clone
 //#include <Bounce2.h>
 // For RTC
 #include "Wire.h" //warum andere Schreibweise ?
@@ -154,16 +154,16 @@ void setup() {
 
 void loop()
 {
-	//Serial.print("Loop/");
-	unsigned long currentTime = millis();
+  //Serial.print("Loop/");
+  unsigned long currentTime = millis();
 
     //böse
     //delay (300);
     if (currentTime - lastUpdateDisplay > DISPLAY_UPDATE_FREQUENCY)
     {
       lastUpdateDisplay = currentTime;
-	  displayTime();
-	}
+    displayTime();
+  }
 
 
     // Only send values at a maximum frequency or woken up from sleep
@@ -217,26 +217,28 @@ void loop()
 
   //State[0]=mark.loop(button_mark_up, button_mark_down);
   //State[1]=jal.loop(button_jal_up, button_jal_down);
+  mark.loop(button_mark_up, button_mark_down);
+  jal.loop(button_jal_up, button_jal_down);
+
   for (int i = 0; i < MAX_COVERS; i++) {
     if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
-	sendState(i, First_CHILD_ID_COVER+i);
-	oldState[i] = State[i];
-	oldStatus[i] = status[i];
+  sendState(i, First_CHILD_ID_COVER+i);
+  oldState[i] = State[i];
+  oldStatus[i] = status[i];
 #ifdef MY_DEBUG_LOCAL
-		Serial.print("Button pressed for Cover ");
-		Serial.println(i+First_CHILD_ID_COVER);
+    Serial.print("Button pressed for Cover ");
+    Serial.println(i+First_CHILD_ID_COVER);
 #endif
-	}
+  }
   }
 
-mark.loop(button_mark_up, button_mark_down);
-jal.loop(button_jal_up, button_jal_down);
 }
 
 
 void receive(const MyMessage &message) {
 
-  if (message.sensor == First_CHILD_ID_COVER||message.sensor == First_CHILD_ID_COVER+1 ) {
+  //Diesen Teil später doppeln für den 2. Cover, solange Indexierung nicht läuft
+  if (message.sensor == First_CHILD_ID_COVER) {
       if (message.isAck()) {
       Serial.println("Ack child1 from gw rec.");
     }
@@ -246,36 +248,33 @@ void receive(const MyMessage &message) {
         //DOWN-Befehl einfügen
         bool button_mark_up=false;
         bool button_mark_down=true;
-        //send(msgUp.setSensor(CHILD_ID_COVER1).set(1)); //sollte wohl nicht mit ACK-Anforderung gesendet werden
         mark.loop(button_mark_up, button_mark_down);
 
 #ifdef MY_DEBUG_LOCAL
-		Serial.print("GW Message down: ");
-		Serial.println(val);
+    Serial.print("GW Message down: ");
+    Serial.println(val);
 #endif
       }
       else if (val == 50) {
         //Stop-Befehle einfügen
         bool button_mark_up=false;
         bool button_mark_down=false;
-        //send(msgUp.setSensor(CHILD_ID_COVER1).set(1)); //sollte wohl nicht mit ACK-Anforderung gesendet werden
         mark.loop(button_mark_up, button_mark_down);
 
 #ifdef MY_DEBUG_LOCAL
-		Serial.print("GW Message stop: ");
-		Serial.println(val);
+    Serial.print("GW Message stop: ");
+    Serial.println(val);
 #endif
       }
       else if (val >50) {
        //UP-Befehle einfügen
        bool button_mark_up=true;
        bool button_mark_down=false;
-       //send(msgUp.setSensor(CHILD_ID_COVER1).set(1)); //sollte wohl nicht mit ACK-Anforderung gesendet werden
        mark.loop(button_mark_up, button_mark_down);
 
 #ifdef MY_DEBUG_LOCAL
-		Serial.print("GW Message up: ");
-		Serial.println(val);
+    Serial.print("GW Msg up: ");
+    Serial.println(val);
 #endif
       }
     }
@@ -284,37 +283,45 @@ void receive(const MyMessage &message) {
     if (message.type == V_UP) {
       // Set state to covering up and send it back to the gateway.
       State[message.sensor-First_CHILD_ID_COVER] = UP;
-      /*sendState();
+      bool button_mark_up=true;
+      bool button_mark_down=false;
+      mark.loop(button_mark_up, button_mark_down);
+/*sendState();
       Serial.println("Moving cover 1 up.");
 
       // Activate actuator until the sensor returns HIGH in loop().
       digitalWrite(COVER2_ON_ACTUATOR_PIN, HIGH);*/
 #ifdef MY_DEBUG_LOCAL
-		Serial.print("GW Message up for Cover ");
-		Serial.println(message.sensor);
+    Serial.print("GW Msg up, C ");
+    Serial.println(message.sensor);
 #endif
 
     }
     if (message.type == V_DOWN) {
       // Set state to covering up and send it back to the gateway.
       State[message.sensor-First_CHILD_ID_COVER] = DOWN;
+      bool button_mark_up=false;
+      bool button_mark_down=true;
+      mark.loop(button_mark_up, button_mark_down);
+
 #ifdef MY_DEBUG_LOCAL
-		Serial.print("GW Message down for Cover ");
-		Serial.println(message.sensor);
+    Serial.print("GW Msg down, C ");
+    Serial.println(message.sensor);
 #endif
     }
-   }
-
-    //nextimeOfLastChange = millis();
-  //} //zu viel !
-
-  if (message.type == V_STOP) {
-    // Set state to idle and send it back to the gateway.
-    State[message.sensor-First_CHILD_ID_COVER] = IDLE;
+ 
+    if (message.type == V_STOP) {
+      // Set state to idle and send it back to the gateway.
+      State[message.sensor-First_CHILD_ID_COVER] = IDLE;
+      bool button_mark_up=false;
+      bool button_mark_down=false;
+      mark.loop(button_mark_up, button_mark_down);
 #ifdef MY_DEBUG_LOCAL
-		Serial.print("GW Message stop for Cover ");
-		Serial.println(message.sensor);
+      Serial.print("GW Msg stop, C ");
+      Serial.println(message.sensor);
 #endif
+    }
+  //hier gehört die Doppelung für das 2. Coverr hin
   }
 }
 
