@@ -269,7 +269,7 @@ void receive(const MyMessage &message) {
     }
     if (message.type == V_DIMMER) { // This could be M_ACK_VARIABLE or M_SET_VARIABLE
       int val = message.getInt();
-      if (val < 50) {
+      if (val < 50 && State[message.sensor-First_CHILD_ID_COVER] != 2 && State[message.sensor-First_CHILD_ID_COVER] != 3) {
         //DOWN-Befehl einfügen
         bool button_mark_up=false;
         bool button_mark_down=true;
@@ -291,7 +291,7 @@ void receive(const MyMessage &message) {
     Serial.println(val);
 #endif
       }
-      else if (val >50) {
+      else if (val >50 && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
        //UP-Befehle einfügen
        bool button_mark_up=true;
        bool button_mark_down=false;
@@ -305,7 +305,7 @@ void receive(const MyMessage &message) {
     }
 
     //deaktiviert, da FHEM das ohne Änderung der .pm noch nicht senden dürfte...
-    if (message.type == V_UP) {
+    if (message.type == V_UP && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
       // Set state to covering up and send it back to the gateway.
       State[message.sensor-First_CHILD_ID_COVER] = UP;
       bool button_mark_up=true;
@@ -322,7 +322,7 @@ void receive(const MyMessage &message) {
 #endif
 
     }
-    if (message.type == V_DOWN) {
+    if (message.type == V_DOWN && State[message.sensor-First_CHILD_ID_COVER] != 2 && State[message.sensor-First_CHILD_ID_COVER] != 3) {
       // Set state to covering up and send it back to the gateway.
       State[message.sensor-First_CHILD_ID_COVER] = DOWN;
       bool button_mark_up=false;
