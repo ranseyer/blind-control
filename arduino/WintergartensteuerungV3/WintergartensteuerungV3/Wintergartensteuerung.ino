@@ -1,4 +1,4 @@
-//V007.2
+//V007.3
 
 #define MY_DEBUG
 #define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
@@ -12,6 +12,8 @@
 #define MY_TRANSPORT_WAIT_READY_MS 2000
 #include <Arduino.h>
 #include <SPI.h>
+#include <BH1750.h>
+#include <Bounce2.h>
 #include "Wgs.h" //JR: Compilerfehler nach git clone
 //#include <Bounce2.h>
 // For RTC
@@ -73,6 +75,9 @@ boolean autostart_done = false;
 Wgs mark(MarkOn, MarkDown, 55000);
 Wgs jal(JalOn, JalDown, 55000);
 
+BH1750 lightSensor;
+uint16_t lastlux = 0;
+
 
 byte decToBcd(byte val)
 {
@@ -101,7 +106,13 @@ MyMessage downMessage(First_CHILD_ID_COVER, V_DOWN);
 MyMessage stopMessage(First_CHILD_ID_COVER, V_STOP);
 MyMessage statusMessage(First_CHILD_ID_COVER, V_STATUS);
 MyMessage msgRain(CHILD_ID_RAIN, V_RAIN);
-MyMessage msgLight(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
+MyMessage msgLux(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
+
+Bounce debounceJalUp    = Bounce();
+Bounce debounceJalDown  = Bounce();
+Bounce debounceMarkEmergency  = Bounce();
+Bounce debounceMarkUp    = Bounce();
+Bounce debounceMarkDown  = Bounce();
 
 
 void sendState(int val1, int sensorID) {
@@ -116,6 +127,7 @@ void before()
 {
   // Initialize In-/Outputs
   pinMode(SwMarkUp, INPUT_PULLUP);
+  
   pinMode(SwMarkDown, INPUT_PULLUP);
   pinMode(SwJalUp, INPUT_PULLUP);
   pinMode(SwJalDown, INPUT_PULLUP);
@@ -128,7 +140,19 @@ void before()
   digitalWrite(MarkDown, HIGH);
   digitalWrite(JalOn, HIGH);
   digitalWrite(JalDown, HIGH);
-  /* initialize our digital pins internal pullup resistor so one pulse switches from high to low (less distortion)
+
+  // After setting up the button, setup debouncer
+  debounceJalUp.attach(SwJalUp);
+  debounceJalUp.interval(5);
+  debounceJalDown.attach(SwJalDown);
+  debounceJalDown.interval(5);
+  debounceMarkUp.attach(SwMarkUp);
+  debounceMarkUp.interval(5);
+  debounceMarkDown.attach(SwMarkDown);
+  debounceMarkDown.interval(5);
+
+  debounceMarkEmergency.attach(SwEmergency);
+  debounceMarkEmergency.interval(5);/* initialize our digital pins internal pullup resistor so one pulse switches from high to low (less distortion)
   //pinMode(DIGITAL_INPUT_SENSOR, INPUT_PULLUP);
   //digitalWrite(DIGITAL_INPUT_SENSOR, HIGH);
   ISR-Funktionalität deaktiviert, wird durch die loop() geprüft und verarbeitet
@@ -137,6 +161,7 @@ void before()
   //attachInterrupt(SENSOR_INTERRUPT, onPulse, CHANGE); //Unterstellt, es soll nur ein ja/nein-Signal sein
 
   Wire.begin();
+  lightSensor.begin();
   //Serial.begin(57600);
 }
 
@@ -179,15 +204,18 @@ void loop()
   }
 
 
-  // Only send values at a maximum frequency or woken up from sleep
+  // Only send values at a maximum frequency 
   if (currentTime - lastSend > SEND_FREQUENCY) {
     lastSend = currentTime;
-  /*Hier einfügen:
-  Miss und Sende den aktuellen Lichtlevel*/
+    uint16_t lux = lightSensor.readLightLevel();// Get Lux value
+    if (lux != lastlux) {
+      send(msgLux.set(lux));
+      lastlux = lux;
+    }
   send(msgRain.set(emergency));
   #ifdef MY_DEBUG_LOCAL
-    //    Serial.print("l/min:");
-    //    Serial.println(flow);
+    Serial.print("lux:");
+    Serial.println(lux);
   #endif
   }
 
