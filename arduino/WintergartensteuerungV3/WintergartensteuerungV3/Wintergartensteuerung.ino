@@ -19,7 +19,7 @@
 #define DS3231_I2C_ADDRESS 0x68
 #include <MySensors.h>
 #define SN "DoubleCover"
-#define SV "0.0.1"
+#define SV "0.0.2"
 //für die millis()-Berechnung, wann wieder gesendet werden soll
 unsigned long SEND_FREQUENCY = 180000; // Sleep time between reads (in milliseconds)
 unsigned long lastSend = 0;
@@ -211,10 +211,12 @@ void loop()
       }
     }
 
+
+
   }
 
-  State[0]=mark.loop(button_mark_up, button_mark_down);
-  State[1]=jal.loop(button_jal_up, button_jal_down);
+  //State[0]=mark.loop(button_mark_up, button_mark_down);
+  //State[1]=jal.loop(button_jal_up, button_jal_down);
   for (int i = 0; i < MAX_COVERS; i++) {
     if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
 	sendState(i, First_CHILD_ID_COVER+i);
@@ -226,6 +228,9 @@ void loop()
 #endif
 	}
   }
+
+mark.loop(button_mark_up, button_mark_down);
+jal.loop(button_jal_up, button_jal_down);
 }
 
 
@@ -239,6 +244,11 @@ void receive(const MyMessage &message) {
       int val = message.getInt();
       if (val < 50) {
         //DOWN-Befehl einfügen
+        bool button_mark_up=false;
+        bool button_mark_down=true;
+        //send(msgUp.setSensor(CHILD_ID_COVER1).set(1)); //sollte wohl nicht mit ACK-Anforderung gesendet werden
+        mark.loop(button_mark_up, button_mark_down);
+
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("GW Message down: ");
 		Serial.println(val);
@@ -246,6 +256,11 @@ void receive(const MyMessage &message) {
       }
       else if (val == 50) {
         //Stop-Befehle einfügen
+        bool button_mark_up=false;
+        bool button_mark_down=false;
+        //send(msgUp.setSensor(CHILD_ID_COVER1).set(1)); //sollte wohl nicht mit ACK-Anforderung gesendet werden
+        mark.loop(button_mark_up, button_mark_down);
+
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("GW Message stop: ");
 		Serial.println(val);
@@ -253,6 +268,11 @@ void receive(const MyMessage &message) {
       }
       else if (val >50) {
        //UP-Befehle einfügen
+       bool button_mark_up=true;
+       bool button_mark_down=false;
+       //send(msgUp.setSensor(CHILD_ID_COVER1).set(1)); //sollte wohl nicht mit ACK-Anforderung gesendet werden
+       mark.loop(button_mark_up, button_mark_down);
+
 #ifdef MY_DEBUG_LOCAL
 		Serial.print("GW Message up: ");
 		Serial.println(val);
