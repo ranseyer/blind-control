@@ -41,49 +41,65 @@ void Wgs::loop(bool button_disable, bool button_enable)
 //debug("State: "+_state);
 
 	if(_mute_time > millis()){
-debug("Muted");
+#ifdef MY_DEBUG_LOCAL
+  debug("Muted");
+#endif
 		return 200;
 	}
 	
 	if(_disable){
-debug("Detected rain!!!!!!!!!!!!!!!!!!!!!!!!!!");
+#ifdef MY_DEBUG_LOCAL
+  debug("Detected rain!!!!!!!!!!!!!!!!!!!!!!!!!!");
+#endif
 		button_disable = true;
 	}
 
 	if(button_disable){
 		if(_state == STATE_DISABLED || _state == STATE_DISABLING){ //Already disabled/disabling
+#ifdef MY_DEBUG_LOCAL
     debug("Already disabling/disabled");
+#endif
 			return 200;
 		}
 		if(_state == STATE_ENABLING){
+    #ifdef MY_DEBUG_LOCAL
     debug("Stop enabling");
+    #endif
 		_mute_time = millis() + 400;
 			stopMovement(STATE_UNKNOWN);
 			return 102;
 		}
-		
+		#ifdef MY_DEBUG_LOCAL
     debug("Start disabling");
+    #endif
 		startMovement(STATE_DISABLING);
 
 	}else if(button_enable){
 		if(_state == STATE_ENABLED || _state == STATE_ENABLING){ //Already enabled/enabling
+    #ifdef MY_DEBUG_LOCAL
     debug("Already enabling/enabled");
+    #endif
 			return 200;
 		}
 		if(_state == STATE_DISABLING){
+    #ifdef MY_DEBUG_LOCAL
     debug("Stop disabling");
+    #endif
 		_mute_time = millis() + 400;
 			stopMovement(STATE_UNKNOWN);
 			return; //Welcher Rückgabecode?
 		}
-		
+		#ifdef MY_DEBUG_LOCAL
     debug("Start enabling");
+	#endif
 		startMovement(STATE_ENABLING);
 	}
 	
 	
   if (_finish_time <= millis() && _finish_time > 0) {
+    #ifdef MY_DEBUG_LOCAL
    debug("reached finish time");
+   #endif
     switch (_state) {
       case STATE_DISABLING:
         stopMovement(STATE_DISABLED);
