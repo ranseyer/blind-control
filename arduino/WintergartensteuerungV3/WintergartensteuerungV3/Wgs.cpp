@@ -27,15 +27,6 @@ _disable = false;
 int Wgs::loop(bool button_disable, bool button_enable)
 {
 
-/*return values:
-0-100: %-Values 0=closed, 100=open
-101: idle
-102: stop
-103: up
-104: down
-200: nothing to do, filter them out in main loop()
-*/
-
 //debug("Loop. Button enable: "+button_enable);
 //debug("Button disable: "+button_disable);
 //debug("State: "+_state);
@@ -59,7 +50,7 @@ int Wgs::loop(bool button_disable, bool button_enable)
 #ifdef MY_DEBUG_LOCAL
     debug("Already disabling/disabled");
 #endif
-			return 200;
+			return _state;
 		}
 		if(_state == STATE_ENABLING){
     #ifdef MY_DEBUG_LOCAL
@@ -67,7 +58,7 @@ int Wgs::loop(bool button_disable, bool button_enable)
     #endif
 		_mute_time = millis() + 400;
 			stopMovement(STATE_UNKNOWN);
-			return 102;
+			return _state;
 		}
 		#ifdef MY_DEBUG_LOCAL
     debug("Start disabling");
@@ -79,7 +70,7 @@ int Wgs::loop(bool button_disable, bool button_enable)
     #ifdef MY_DEBUG_LOCAL
     debug("Already enabling/enabled");
     #endif
-			return 200;
+			return _state;
 		}
 		if(_state == STATE_DISABLING){
     #ifdef MY_DEBUG_LOCAL
@@ -87,7 +78,7 @@ int Wgs::loop(bool button_disable, bool button_enable)
     #endif
 		_mute_time = millis() + 400;
 			stopMovement(STATE_UNKNOWN);
-			return; //Welcher Rückgabecode?
+			return _state;
 		}
 		#ifdef MY_DEBUG_LOCAL
     debug("Start enabling");
@@ -110,7 +101,7 @@ int Wgs::loop(bool button_disable, bool button_enable)
     }
 //Return value?!?
   }
-	
+  return _state;	
 }
 
 void Wgs::setDisable(boolean b)
