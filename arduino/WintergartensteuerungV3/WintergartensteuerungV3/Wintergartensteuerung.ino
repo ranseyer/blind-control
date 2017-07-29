@@ -125,9 +125,11 @@ void before()
   digitalWrite(MarkDown, HIGH);
   digitalWrite(JalOn, HIGH);
   digitalWrite(JalDown, HIGH);
-  // initialize our digital pins internal pullup resistor so one pulse switches from high to low (less distortion)
-  pinMode(DIGITAL_INPUT_SENSOR, INPUT_PULLUP);
-  digitalWrite(DIGITAL_INPUT_SENSOR, HIGH);
+  /* initialize our digital pins internal pullup resistor so one pulse switches from high to low (less distortion)
+  //pinMode(DIGITAL_INPUT_SENSOR, INPUT_PULLUP);
+  //digitalWrite(DIGITAL_INPUT_SENSOR, HIGH);
+  ISR-Funktionalität deaktiviert, wird durch die loop() geprüft und verarbeitet
+  */
   //pulseCount = oldPulseCount = 0;
   //attachInterrupt(SENSOR_INTERRUPT, onPulse, CHANGE); //Unterstellt, es soll nur ein ja/nein-Signal sein
 
@@ -155,30 +157,6 @@ void setup() {
 void loop()
 {
   //Serial.print("Loop/");
-  unsigned long currentTime = millis();
-
-    //böse
-    //delay (300);
-    if (currentTime - lastUpdateDisplay > DISPLAY_UPDATE_FREQUENCY)
-    {
-      lastUpdateDisplay = currentTime;
-    displayTime();
-  }
-
-
-    // Only send values at a maximum frequency or woken up from sleep
-    if (currentTime - lastSend > SEND_FREQUENCY)
-    {
-      lastSend = currentTime;
-  /*Hier einfügen:
-  Miss und Sende den aktuellen Lichtlevel
-  Miss und sende den aktuellen Regenstatus (sofern nicht nur Digital ja/nein); das wäre in der ISR aufgehoben bzw. */
-  #ifdef MY_DEBUG_LOCAL
-    //    Serial.print("l/min:");
-    //    Serial.println(flow);
-  #endif
-    }
-
 
   bool button_mark_up = digitalRead(SwMarkUp) == LOW;
   bool button_mark_down = digitalRead(SwMarkDown) == LOW;
@@ -188,17 +166,36 @@ void loop()
 
   mark.setDisable(emergency);
 
+  unsigned long currentTime = millis();
+
+  //böse
+  //delay (300);
+  if (currentTime - lastUpdateDisplay > DISPLAY_UPDATE_FREQUENCY) {
+    lastUpdateDisplay = currentTime;
+    displayTime();
+  }
+
+
+  // Only send values at a maximum frequency or woken up from sleep
+  if (currentTime - lastSend > SEND_FREQUENCY) {
+    lastSend = currentTime;
+  /*Hier einfügen:
+  Miss und Sende den aktuellen Lichtlevel*/
+  send(msgRain.set(emergency));
+  #ifdef MY_DEBUG_LOCAL
+    //    Serial.print("l/min:");
+    //    Serial.println(flow);
+  #endif
+  }
+
   //Autostart code
   autostart_check_tick++;
   if(autostart_check_tick >= autostart_check_delay){
     autostart_check_tick = 0;
 
-
     // Darf das mehrfach sein ?
     byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
     readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);
-
-
 
     if(autostart_done){ //Already done
       if(hour > autostart_time){
@@ -210,9 +207,6 @@ void loop()
         autostart_done = true;
       }
     }
-
-
-
   }
 
   //State[0]=mark.loop(button_mark_up, button_mark_down);
@@ -222,18 +216,16 @@ void loop()
 
   for (int i = 0; i < MAX_COVERS; i++) {
     if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
-  sendState(i, First_CHILD_ID_COVER+i);
-  oldState[i] = State[i];
-  oldStatus[i] = status[i];
+      sendState(i, First_CHILD_ID_COVER+i);
+      oldState[i] = State[i];
+      oldStatus[i] = status[i];
 #ifdef MY_DEBUG_LOCAL
-    Serial.print("Button pressed for Cover ");
-    Serial.println(i+First_CHILD_ID_COVER);
+      Serial.print("Button pressed for Cover ");
+      Serial.println(i+First_CHILD_ID_COVER);
 #endif
+    }
   }
-  }
-
 }
-
 
 void receive(const MyMessage &message) {
 
@@ -372,6 +364,4 @@ void displayTime()
   Serial.print(month, DEC);
   Serial.print("/");
   Serial.println(year, DEC);
-
-
 }
