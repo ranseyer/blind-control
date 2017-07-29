@@ -1,4 +1,4 @@
-//V007.1
+//V007.2
 
 #define MY_DEBUG
 #define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
@@ -209,10 +209,10 @@ void loop()
     }
   }
 
-  //State[0]=mark.loop(button_mark_up, button_mark_down);
-  //State[1]=jal.loop(button_jal_up, button_jal_down);
-  mark.loop(button_mark_up, button_mark_down);
-  jal.loop(button_jal_up, button_jal_down);
+  State[0]=mark.loop(button_mark_up, button_mark_down);
+  State[1]=jal.loop(button_jal_up, button_jal_down);
+//  mark.loop(button_mark_up, button_mark_down);
+//  jal.loop(button_jal_up, button_jal_down);
 
   for (int i = 0; i < MAX_COVERS; i++) {
     if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
