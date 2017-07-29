@@ -1,4 +1,5 @@
-//V007.3
+#define SN "DoubleCover"
+#define SV "0.1.0"
 
 #define MY_DEBUG
 #define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
@@ -20,8 +21,6 @@
 #include "Wire.h" //warum andere Schreibweise ?
 #define DS3231_I2C_ADDRESS 0x68
 #include <MySensors.h>
-#define SN "DoubleCover"
-#define SV "0.0.2"
 //für die millis()-Berechnung, wann wieder gesendet werden soll
 unsigned long SEND_FREQUENCY = 180000; // Sleep time between reads (in milliseconds)
 unsigned long lastSend = 0;
@@ -47,9 +46,9 @@ const int SwEmergency = 5;
 // Output Pins
 const int JalOn = 10;
 const int JalDown = 11;
-const int JalRevers = 12;
-const int MarkOn = 13;
-const int MarkDown = 14;
+//const int JalRevers = 12;
+const int MarkOn = 12;
+const int MarkDown = 13;
 
 int MarkUpState = 0;
 int MarkDownState = 0;
