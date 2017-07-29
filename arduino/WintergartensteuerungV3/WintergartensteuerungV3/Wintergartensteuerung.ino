@@ -36,8 +36,8 @@ unsigned long lastUpdateDisplay = 0;
 */
 
 // Input Pins for Switch Markise Up/Down
-const int SwMarkUp = 8;
-const int SwMarkDown = 9;
+const int SwMarkUp = 3;
+const int SwMarkDown = 4;
 // Input Pins for Switch Jalosie Up/Down
 const int SwJalUp = 7;
 const int SwJalDown = 6;
@@ -127,7 +127,7 @@ void before()
 {
   // Initialize In-/Outputs
   pinMode(SwMarkUp, INPUT_PULLUP);
-  
+
   pinMode(SwMarkDown, INPUT_PULLUP);
   pinMode(SwJalUp, INPUT_PULLUP);
   pinMode(SwJalDown, INPUT_PULLUP);
@@ -204,7 +204,7 @@ void loop()
   }
 
 
-  // Only send values at a maximum frequency 
+  // Only send values at a maximum frequency
   if (currentTime - lastSend > SEND_FREQUENCY) {
     lastSend = currentTime;
     uint16_t lux = lightSensor.readLightLevel();// Get Lux value
@@ -334,7 +334,7 @@ void receive(const MyMessage &message) {
     Serial.println(message.sensor);
 #endif
     }
- 
+
     if (message.type == V_STOP) {
       // Set state to idle and send it back to the gateway.
       State[message.sensor-First_CHILD_ID_COVER] = IDLE;
