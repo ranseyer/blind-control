@@ -1,8 +1,14 @@
-#define SN "DoubleCover"
-#define SV "0.1.0"
+/*
+ * Changelog: Kommentare zum weiteren Vorgehen eingefügt
+ * Die Zuordnung der Relais habe ich nicht verstanden,
+ * wo das zu korrigieren ist
+ */
 
-#define MY_DEBUG
-#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
+#define SN "DoubleCover"
+#define SV "0.2.0" //Das darf jetzt ruhig mal sein
+
+//#define MY_DEBUG
+//#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
 // Enable RS485 transport layer
 #define MY_RS485
 // Define this to enables DE-pin management on defined pin
@@ -15,26 +21,47 @@
 #include <SPI.h>
 #include <BH1750.h>
 #include <Bounce2.h>
-#include "Wgs.h" //JR: Compilerfehler nach git clone
-//#include <Bounce2.h>
+#include "Wgs.h" 
 // For RTC
 #include "Wire.h" //warum andere Schreibweise ?
-#define DS3231_I2C_ADDRESS 0x68
+#include <TimeLib.h> 
+#include <DS3232RTC.h>
+#define DS3231_I2C_ADDRESS 0x68 //könnte man evtl. umstellen, auf die RTC-lib
+//#include <LiquidCrystal_I2C.h>
 #include <MySensors.h>
+
 //für die millis()-Berechnung, wann wieder gesendet werden soll
 unsigned long SEND_FREQUENCY = 180000; // Sleep time between reads (in milliseconds)
 unsigned long lastSend = 0;
 unsigned long DISPLAY_UPDATE_FREQUENCY = 300; // (in milliseconds)
 unsigned long lastUpdateDisplay = 0;
 
-/*
- * Deaktiviert, da über loop() gelöst
-// Initialize motion message
-#define DIGITAL_INPUT_SENSOR 3   // The digital input you attached your rain sensor.  (Only 2 and 3 generates interrupt!)
-#define SENSOR_INTERRUPT DIGITAL_INPUT_SENSOR-2 // Usually the interrupt = pin -2 (on uno/nano anyway)
+/*für RTC; code ist von hier: https://www.mysensors.org/build/display
+Da steht auch, wie man ein I2C-Display ansteuert... 
+und die Zeit vom Controller holt
 */
+bool timeReceived = false;
+unsigned long lastUpdate=0, lastRequest=0;
+
+// Initialize display. Google the correct settings for your display. 
+// The follwoing setting should work for the recommended display in the MySensors "shop".
+//LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); //Funktionierte leider beim compilieren nicht, daher deaktiviert
+//LiquidCrystal_I2C lcd(1); 
+
+#define CHILD_ID_LIGHT 0
+#define CHILD_ID_RAIN 1   // Id of the sensor child
+#define First_CHILD_ID_COVER 2
+#define MAX_COVERS 2
 
 // Input Pins for Switch Markise Up/Down
+/*Könnte man für jeweils die zu einem Cover gehörenden PINs auch über eine Array-Funktion lösen, 
+ damit man dann zur Initialisierung, Abfrage etc. einfach eine Schleife drüberlegen kann.
+ Also etwa so:
+ const int INPUT_PINS[MAX_COVERS] = {
+   {3,4},
+   {7,6}
+ };
+*/
 const int SwMarkUp = 3;
 const int SwMarkDown = 4;
 // Input Pins for Switch Jalosie Up/Down
@@ -44,12 +71,16 @@ const int SwJalDown = 6;
 const int SwEmergency = 5;
 
 // Output Pins
+//dto zum obigen Array
 const int JalOn = 10;
 const int JalDown = 11;
 //const int JalRevers = 12;
 const int MarkOn = 12;
 const int MarkDown = 13;
 
+/*Die States könnten vermutlich auch bool sein (Speicher...)
+und die Cover-spezifischen könnte man in einem Array organisieren
+ */
 int MarkUpState = 0;
 int MarkDownState = 0;
 int JalUpState = 0;
@@ -64,19 +95,14 @@ const int autostart_check_delay = 200; //in ticks
 int autostart_check_tick = 200; //in ticks
 boolean autostart_done = false;
 
-#define CHILD_ID_LIGHT 0
-#define CHILD_ID_RAIN 1   // Id of the sensor child
-#define First_CHILD_ID_COVER 2
-#define MAX_COVERS 2
-//#define CHILDCOVER1_ID_CONFIG_COVER 2 //ChildID darf vermutlich auch identisch sein, es wird bei cover ja kein VARx genutzt
-//#define CHILDCOVER2_ID_CONFIG_COVER 3 //dann ist alles "beieinander"
-
+/*Allerdings habe ich keine Idee, wie man die Devices
+Innerhalb einer Schleife sinnvoll anlegen kann.
+Vielleicht hat Dein Sohn da eine Idee*/
 Wgs mark(MarkOn, MarkDown, 55000);
 Wgs jal(JalOn, JalDown, 55000);
 
 BH1750 lightSensor;
 uint16_t lastlux = 0;
-
 
 byte decToBcd(byte val)
 {
@@ -88,7 +114,6 @@ byte bcdToDec(byte val)
   return( (val/16*10) + (val%16) );
 }
 
-// Braucht es nur einmal...
 enum State {
   IDLE,
   UP, // Window covering. Up.
@@ -100,13 +125,16 @@ int status[MAX_COVERS] = {0};
 int oldStatus[MAX_COVERS] = {0};
 
 //eine MyMessage-Funktion sollte ausreichen; Rest geht (hoffentlich) über Indexierung
-MyMessage upMessage(First_CHILD_ID_COVER, V_UP);  /// V_UP ???
+MyMessage upMessage(First_CHILD_ID_COVER, V_UP);
 MyMessage downMessage(First_CHILD_ID_COVER, V_DOWN);
 MyMessage stopMessage(First_CHILD_ID_COVER, V_STOP);
 MyMessage statusMessage(First_CHILD_ID_COVER, V_STATUS);
 MyMessage msgRain(CHILD_ID_RAIN, V_RAIN);
 MyMessage msgLux(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
 
+/*Auck keine Ahnung, ob Bounce mit einem Anlegen 
+ * über ein Array klarkäme
+ */
 Bounce debounceJalUp    = Bounce();
 Bounce debounceJalDown  = Bounce();
 Bounce debounceMarkEmergency  = Bounce();
@@ -124,19 +152,24 @@ void sendState(int val1, int sensorID) {
 
 void before()
 {
+  /*
+   * Mal exemplarisch für Markise umsortiert, wie man das im Ramhen eines Arrays aufrufen würde
+   */
+  
   // Initialize In-/Outputs
   pinMode(SwMarkUp, INPUT_PULLUP);
-
+  debounceMarkUp.attach(SwMarkUp);
+  debounceMarkUp.interval(5);
+  pinMode(MarkOn, OUTPUT);
+  digitalWrite(MarkOn, HIGH);
   pinMode(SwMarkDown, INPUT_PULLUP);
+  pinMode(MarkDown, OUTPUT);
+  digitalWrite(MarkDown, HIGH);
+  
   pinMode(SwJalUp, INPUT_PULLUP);
   pinMode(SwJalDown, INPUT_PULLUP);
-  pinMode(SwEmergency, INPUT_PULLUP);
-  pinMode(MarkOn, OUTPUT);
-  pinMode(MarkDown, OUTPUT);
   pinMode(JalOn, OUTPUT);
   pinMode(JalDown, OUTPUT);
-  digitalWrite(MarkOn, HIGH);
-  digitalWrite(MarkDown, HIGH);
   digitalWrite(JalOn, HIGH);
   digitalWrite(JalDown, HIGH);
 
@@ -145,23 +178,19 @@ void before()
   debounceJalUp.interval(5);
   debounceJalDown.attach(SwJalDown);
   debounceJalDown.interval(5);
-  debounceMarkUp.attach(SwMarkUp);
-  debounceMarkUp.interval(5);
   debounceMarkDown.attach(SwMarkDown);
   debounceMarkDown.interval(5);
-
+  
+  pinMode(SwEmergency, INPUT_PULLUP);
   debounceMarkEmergency.attach(SwEmergency);
-  debounceMarkEmergency.interval(5);/* initialize our digital pins internal pullup resistor so one pulse switches from high to low (less distortion)
-  //pinMode(DIGITAL_INPUT_SENSOR, INPUT_PULLUP);
-  //digitalWrite(DIGITAL_INPUT_SENSOR, HIGH);
-  ISR-Funktionalität deaktiviert, wird durch die loop() geprüft und verarbeitet
-  */
-  //pulseCount = oldPulseCount = 0;
-  //attachInterrupt(SENSOR_INTERRUPT, onPulse, CHANGE); //Unterstellt, es soll nur ein ja/nein-Signal sein
-
+  debounceMarkEmergency.interval(5);
+  
   Wire.begin();
   lightSensor.begin();
   //Serial.begin(57600);
+
+  setSyncProvider(RTC.get);  
+
 }
 
 void presentation() {
@@ -179,6 +208,8 @@ void setup() {
   for (int i = 0; i < MAX_COVERS; i++) {
     sendState(i, First_CHILD_ID_COVER+i);
   }
+  // Request latest time from controller at startup
+  requestTime(); 
 }
 
 void loop()
@@ -195,13 +226,23 @@ void loop()
 
   unsigned long currentTime = millis();
 
-  //böse
-  //delay (300);
+  //Könnte auch weg, wenn kein Display mehr angeschlossen werden soll
   if (currentTime - lastUpdateDisplay > DISPLAY_UPDATE_FREQUENCY) {
     lastUpdateDisplay = currentTime;
     displayTime();
+    //updateDisplay();
   }
-
+  // If no time has been received yet, request it every 10 second from controller
+  // When time has been received, request update every hour
+  if ((!timeReceived && (currentTime-lastRequest) > (10UL*1000UL))
+    || (timeReceived && (currentTime-lastRequest) > (60UL*1000UL*60UL))) {
+    // Request time from controller. 
+#ifdef MY_DEBUG_LOCAL
+    Serial.println("requesting time");
+#endif
+    requestTime();  
+    lastRequest = currentTime;
+  }
 
   // Only send values at a maximum frequency
   if (currentTime - lastSend > SEND_FREQUENCY) {
@@ -210,12 +251,12 @@ void loop()
     if (lux != lastlux) {
       send(msgLux.set(lux));
       lastlux = lux;
-    }
-  send(msgRain.set(emergency));
   #ifdef MY_DEBUG_LOCAL
-    Serial.print("lux:");
-    Serial.println(lux);
+      Serial.print("lux:");
+      Serial.println(lux);
   #endif
+    }
+    send(msgRain.set(emergency));
   }
 
   //Autostart code
@@ -241,12 +282,22 @@ void loop()
 
   State[0]=mark.loop(button_mark_up, button_mark_down);
   State[1]=jal.loop(button_jal_up, button_jal_down);
-//  mark.loop(button_mark_up, button_mark_down);
-//  jal.loop(button_jal_up, button_jal_down);
 
   for (int i = 0; i < MAX_COVERS; i++) {
     if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
       sendState(i, First_CHILD_ID_COVER+i);
+/*
+ * Hier könnte man einen Timer einfügen, der die Zeit erfaßt, 
+ * die das jeweilige Cover fährt und daraus einen %-Wert errechnen.
+ * Den könnte man dann bei Überschreitung einer gewissen Hysterese
+ * senden bzw. dann, wenn ein Stop-Befehl kommt.
+ * Weiter könnte man darüber vergleichen, ob das jeweilige Cover
+ * seinen Sollwert erreicht hat und dann die Fahrt abbrechen.
+ * Dazu bräuchte man aber (mindestens) die Fahrtdauern hoch bzw. runter, 
+ * die man in VAR1 und VAR2 vom Controller erfragen könnte bzw.
+ * mit einem Standardwert vorbelegen.
+ * Zielwert bei Tastendruck löschen?
+ */
       oldState[i] = State[i];
       oldStatus[i] = status[i];
 #ifdef MY_DEBUG_LOCAL
@@ -268,6 +319,14 @@ void receive(const MyMessage &message) {
     }
     if (message.type == V_DIMMER) { // This could be M_ACK_VARIABLE or M_SET_VARIABLE
       int val = message.getInt();
+      /*
+       * Die State-Bezüge sind "geraten", es sollte lt cpp sein:
+       * const int STATE_UNKNOWN = 0;
+          const int STATE_ENABLED = 1;
+          const int STATE_DISABLING = 2;
+          const int STATE_DISABLED = 3;
+          const int STATE_ENABLING = 4;
+       */
       if (val < 50 && State[message.sensor-First_CHILD_ID_COVER] != 2 && State[message.sensor-First_CHILD_ID_COVER] != 3) {
         //DOWN-Befehl einfügen
         bool button_mark_up=false;
@@ -310,11 +369,7 @@ void receive(const MyMessage &message) {
       bool button_mark_up=true;
       bool button_mark_down=false;
       mark.loop(button_mark_up, button_mark_down);
-/*sendState();
-      Serial.println("Moving cover 1 up.");
-
-      // Activate actuator until the sensor returns HIGH in loop().
-      digitalWrite(COVER2_ON_ACTUATOR_PIN, HIGH);*/
+      //sendState();
 #ifdef MY_DEBUG_LOCAL
     Serial.print("GW Msg up, C ");
     Serial.println(message.sensor);
@@ -398,3 +453,47 @@ void displayTime()
   Serial.print("/");
   Serial.println(year, DEC);
 }
+
+void receiveTime(unsigned long controllerTime) {
+  // Ok, set incoming time 
+ #ifdef MY_DEBUG_LOCAL
+  Serial.print("Time value received: ");
+  Serial.println(controllerTime);
+#endif
+  RTC.set(controllerTime); // this sets the RTC to the time from controller - which we do want periodically
+  timeReceived = true;
+}
+
+/*void updateDisplay(){
+  tmElements_t tm;
+  RTC.read(tm);
+
+  // Print date and time 
+  lcd.home();
+  lcd.print(tm.Day);
+  lcd.print("/");
+  lcd.print(tm.Month);
+//  lcd.print(" ");
+//  lcd.print(tmYearToCalendar(tm.Year)-2000);
+
+  lcd.print(" ");
+  printDigits(tm.Hour);
+  lcd.print(":");
+  printDigits(tm.Minute);
+  lcd.print(":");
+  printDigits(tm.Second);
+
+  // Go to next line and print temperature
+  lcd.setCursor ( 0, 1 );  
+  lcd.print("Temp: ");
+  lcd.print(RTC.temperature()/4);
+  lcd.write(223); // Degree-sign
+  lcd.print("C");
+}
+
+
+void printDigits(int digits){
+  if(digits < 10)
+    lcd.print('0');
+  lcd.print(digits);
+}*/
