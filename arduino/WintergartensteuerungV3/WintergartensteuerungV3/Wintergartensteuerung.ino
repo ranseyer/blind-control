@@ -342,7 +342,7 @@ void receive(const MyMessage &message) {
 #endif
       }
       else if (val == 50) {
-        //Down
+        //Stop
         bool button_mark_up=false;
         bool button_mark_down=false;
         mark.loop(button_mark_up, button_mark_down);
@@ -353,7 +353,7 @@ void receive(const MyMessage &message) {
 #endif
       }
       else if (val >50 && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
-       //UP-Befehle einfügen
+       //Up
        bool button_mark_up=false;
        bool button_mark_down=true;
        mark.loop(button_mark_up, button_mark_down);
