@@ -331,18 +331,18 @@ void receive(const MyMessage &message) {
           const int STATE_ENABLING = 4;
        */
       if (val < 50 && State[message.sensor-First_CHILD_ID_COVER] != 2 && State[message.sensor-First_CHILD_ID_COVER] != 3) {
-        //DOWN-Befehl einfügen
-        bool button_mark_up=false;
-        bool button_mark_down=true;
+        //Up
+        bool button_mark_up=true;
+        bool button_mark_down=false;
         mark.loop(button_mark_up, button_mark_down);
 
 #ifdef MY_DEBUG_LOCAL
-    Serial.print("GW Message down: ");
+    Serial.print("GW Message up: ");
     Serial.println(val);
 #endif
       }
       else if (val == 50) {
-        //Stop-Befehle einfügen
+        //Down
         bool button_mark_up=false;
         bool button_mark_down=false;
         mark.loop(button_mark_up, button_mark_down);
@@ -354,16 +354,17 @@ void receive(const MyMessage &message) {
       }
       else if (val >50 && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
        //UP-Befehle einfügen
-       bool button_mark_up=true;
-       bool button_mark_down=false;
+       bool button_mark_up=false;
+       bool button_mark_down=true;
        mark.loop(button_mark_up, button_mark_down);
 
 #ifdef MY_DEBUG_LOCAL
-    Serial.print("GW Msg up: ");
+    Serial.print("GW Msg down: ");
     Serial.println(val);
 #endif
       }
     }
+
 
     //deaktiviert, da FHEM das ohne Änderung der .pm noch nicht senden dürfte...
     if (message.type == V_UP && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
