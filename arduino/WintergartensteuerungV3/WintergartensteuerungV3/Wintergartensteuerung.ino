@@ -99,8 +99,8 @@ Vielleicht hat Dein Sohn da eine Idee*/
 // Kürzer für Test
 //Array-Test
 Wgs Cover[MAX_COVERS]= {
-  {MarkOn, MarkDown, 6000},
-  {JalOn, JalDown, 6000}
+  {MarkOn, MarkDown, 16000},
+  {JalOn, JalDown, 16000}
 };
 
 BH1750 lightSensor;
