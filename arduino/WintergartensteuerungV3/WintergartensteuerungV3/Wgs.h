@@ -11,6 +11,8 @@
 class Wgs
 {
   public:
+    Wgs();
+    void setPins(uint8_t pin_on, uint8_t pin_down, long duration);
     Wgs(int pin_on, int pin_down, long duration);
     int loop(bool button_disable, bool button_enable);
     void setDisable(boolean b);
