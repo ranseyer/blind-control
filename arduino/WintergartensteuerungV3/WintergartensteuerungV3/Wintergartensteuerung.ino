@@ -6,8 +6,8 @@
 #define SN "DoubleCover"
 #define SV "0.3.1"
 
-//#define MY_DEBUG
-//#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
+#define MY_DEBUG
+#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
 // Enable RS485 transport layer
 #define MY_RS485
 //#define MY_RS485_HWSERIAL Serial
