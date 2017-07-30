@@ -23,6 +23,8 @@
 #include <BH1750.h>
 #include <Bounce2.h>
 #include "Wgs.h"
+#include "Time.h"
+
 // For RTC
 #include "Wire.h" //warum andere Schreibweise ?
 #include <BME280I2C.h> // From Library Manager, comes with the BME280-lib by Tyler Glenn
@@ -163,7 +165,7 @@ int lastForecast = -1;
 const int LAST_SAMPLES_COUNT = 5;
 float lastPressureSamples[LAST_SAMPLES_COUNT];
 // this CONVERSION_FACTOR is used to convert from Pa to kPa in forecast algorithm
-// get kPa/h be dividing hPa by 10 
+// get kPa/h be dividing hPa by 10
 #define CONVERSION_FACTOR (1.0/10.0)
 
 int minuteCount = 0;
@@ -274,7 +276,7 @@ void loop()
   #endif
     }
     send(msgRain.set(emergency));
-    
+
 /*    float temperature = bme.temp(metric);
     if (isnan(temperature)) {
 #ifdef MY_DEBUG_LOCAL
@@ -323,8 +325,8 @@ void loop()
 
 
 
-/*  
- * Braucht es den Autostart-Teil bei zentraler Steuerung?   
+/*
+ * Braucht es den Autostart-Teil bei zentraler Steuerung?
  //Autostart code
   autostart_check_tick++;
   if(autostart_check_tick >= autostart_check_delay){
@@ -349,7 +351,7 @@ void loop()
   State[0]=Cover[0].loop(button_mark_up, button_mark_down);
   State[1]=Cover[1].loop(button_jal_up, button_jal_down);
   for (int i = 0; i < MAX_COVERS; i++) {
- 
+
     if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
       sendState(i, First_CHILD_ID_COVER+i);
 /*
