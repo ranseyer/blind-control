@@ -1,14 +1,16 @@
 /*
  * Changelog: Kommentare zum weiteren Vorgehen eingefügt
+ * BME280 eingefügt mit pressure und forecast
  */
 
 #define SN "DoubleCover"
-#define SV "0.2.5"
+#define SV "0.3.1"
 
-#define MY_DEBUG
+//#define MY_DEBUG
 //#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
 // Enable RS485 transport layer
 #define MY_RS485
+//#define MY_RS485_HWSERIAL Serial
 // Define this to enables DE-pin management on defined pin
 #define MY_RS485_DE_PIN 2
 // Set RS485 baud rate to use
@@ -20,7 +22,10 @@
 #include <BH1750.h>
 #include <Bounce2.h>
 #include "Wgs.h"
-#include <Wire.h>
+// For RTC
+#include "Wire.h" //warum andere Schreibweise ?
+#include <BME280I2C.h> // From Library Manager, comes with the BME280-lib by Tyler Glenn
+
 #include <MySensors.h>
 
 //für die millis()-Berechnung, wann wieder gesendet werden soll
@@ -31,6 +36,15 @@ unsigned long lastSend = 0;
 #define CHILD_ID_RAIN 1   // Id of the sensor child
 #define First_CHILD_ID_COVER 2
 #define MAX_COVERS 2
+
+#define BARO_CHILD 10
+#define TEMP_CHILD 11
+#define HUM_CHILD 12
+
+BME280I2C bme;
+const float ALTITUDE = 200; // <-- adapt this value to your location's altitude (in m). Use your smartphone GPS to get an accurate value!
+unsigned long lastSendBme = 0;
+//#define SEALEVELPRESSURE_HPA (1013.25)
 
 // Input Pins for Switch Markise Up/Down
 /*Könnte man für jeweils die zu einem Cover gehörenden PINs auch über eine Array-Funktion lösen,
@@ -124,6 +138,44 @@ Bounce debounceMarkEmergency  = Bounce();
 Bounce debounceMarkUp    = Bounce();
 Bounce debounceMarkDown  = Bounce();
 
+//bme: Value according to MySensors for forecast accuracy
+unsigned long bmeDelayTime = 60000;
+
+const char *weather[] = { "stable", "sunny", "cloudy", "unstable", "thunderstorm", "unknown" };
+enum FORECAST
+{
+    STABLE = 0,            // "Stable Weather Pattern"
+    SUNNY = 1,            // "Slowly rising Good Weather", "Clear/Sunny "
+    CLOUDY = 2,            // "Slowly falling L-Pressure ", "Cloudy/Rain "
+    UNSTABLE = 3,        // "Quickly rising H-Press",     "Not Stable"
+    THUNDERSTORM = 4,    // "Quickly falling L-Press",    "Thunderstorm"
+    UNKNOWN = 5            // "Unknown (More Time needed)
+};
+
+float lastPressure = -1;
+float lastTemp = -1;
+float lastHum = -1;
+int lastForecast = -1;
+
+const int LAST_SAMPLES_COUNT = 5;
+float lastPressureSamples[LAST_SAMPLES_COUNT];
+// this CONVERSION_FACTOR is used to convert from Pa to kPa in forecast algorithm
+// get kPa/h be dividing hPa by 10 
+#define CONVERSION_FACTOR (1.0/10.0)
+
+int minuteCount = 0;
+bool firstRound = true;
+// average value is used in forecast algorithm.
+float pressureAvg;
+// average after 2 hours is used as reference value for the next iteration.
+float pressureAvg2;
+
+float dP_dt;
+bool metric = true;
+MyMessage tempMsg(TEMP_CHILD, V_TEMP);
+MyMessage pressureMsg(BARO_CHILD, V_PRESSURE);
+MyMessage forecastMsg(BARO_CHILD, V_FORECAST);
+MyMessage humMsg(HUM_CHILD, V_HUM);
 
 void sendState(int val1, int sensorID) {
   // Send current state and status to gateway.
@@ -169,6 +221,7 @@ void before()
 
   Wire.begin();
   lightSensor.begin();
+  bme.begin();
 }
 
 void presentation() {
@@ -179,13 +232,16 @@ void presentation() {
     present(First_CHILD_ID_COVER+i, S_COVER);
     present(First_CHILD_ID_COVER+i, S_CUSTOM);
   }
-
+  present(BARO_CHILD, S_BARO);
+  present(TEMP_CHILD, S_TEMP);
+  present(HUM_CHILD, S_HUM);
 }
 
 void setup() {
   for (int i = 0; i < MAX_COVERS; i++) {
     sendState(i, First_CHILD_ID_COVER+i);
   }
+  metric = getControllerConfig().isMetric;
 }
 
 void loop()
@@ -215,7 +271,54 @@ void loop()
   #endif
     }
     send(msgRain.set(emergency));
+    
+    float temperature = bme.temp(metric);
+    if (isnan(temperature)) {
+#ifdef MY_DEBUG_LOCAL
+    Serial.println("Failed reading temperature");
+#endif
+    } else if (temperature != lastTemp) {
+      // Only send temperature if it changed since the last measurement
+      lastTemp = temperature;
+      send(tempMsg.set(temperature, 1));
+#ifdef MY_DEBUG_LOCAL
+      Serial.print("T: ");
+      Serial.println(temperature);
+#endif
+    }
+
+    float humidity = bme.hum();
+    if (isnan(humidity)) {
+#ifdef MY_DEBUG_LOCAL
+      Serial.println("Failed reading humidity");
+#endif
+    } else if (humidity != lastHum) {
+      // Only send humidity if it changed since the last measurement
+      lastHum = humidity;
+      send(humMsg.set(humidity, 1));
+#ifdef MY_DEBUG
+      Serial.print("H: ");
+      Serial.println(humidity);
+#endif
+    }
   }
+
+  if (currentTime - lastSendBme > bmeDelayTime) {
+    float pressure_local = bme.pres();                    // Get pressure at current location
+    float pressure = pressure_local/pow((1.0 - ( ALTITUDE / 44330.0 )), 5.255); // Adjust to sea level pressure using user altitude
+    int forecast = sample(pressure);
+    if (pressure != lastPressure) {
+      send(pressureMsg.set(pressure, 2));
+      lastPressure = pressure;
+    }
+
+    if (forecast != lastForecast){
+      send(forecastMsg.set(weather[forecast]));
+      lastForecast = forecast;
+    }
+  }
+
+
 
 /*  
  * Braucht es den Autostart-Teil bei zentraler Steuerung?   
@@ -367,4 +470,159 @@ void receive(const MyMessage &message) {
     }
   //hier gehört die Doppelung für das 2. Cover hin
   }
+}
+
+float getLastPressureSamplesAverage()
+{
+  float lastPressureSamplesAverage = 0;
+  for (int i = 0; i < LAST_SAMPLES_COUNT; i++)
+  {
+    lastPressureSamplesAverage += lastPressureSamples[i];
+  }
+  lastPressureSamplesAverage /= LAST_SAMPLES_COUNT;
+
+  return lastPressureSamplesAverage;
+}
+
+
+// Algorithm found here
+// http://www.freescale.com/files/sensors/doc/app_note/AN3914.pdf
+// Pressure in hPa -->  forecast done by calculating kPa/h
+int sample(float pressure)
+{
+  // Calculate the average of the last n minutes.
+  int index = minuteCount % LAST_SAMPLES_COUNT;
+  lastPressureSamples[index] = pressure;
+
+  minuteCount++;
+  if (minuteCount > 185)
+  {
+    minuteCount = 6;
+  }
+
+  if (minuteCount == 5)
+  {
+    pressureAvg = getLastPressureSamplesAverage();
+  }
+  else if (minuteCount == 35)
+  {
+    float lastPressureAvg = getLastPressureSamplesAverage();
+    float change = (lastPressureAvg - pressureAvg) * CONVERSION_FACTOR;
+    if (firstRound) // first time initial 3 hour
+    {
+      dP_dt = change * 2; // note this is for t = 0.5hour
+    }
+    else
+    {
+      dP_dt = change / 1.5; // divide by 1.5 as this is the difference in time from 0 value.
+    }
+  }
+  else if (minuteCount == 65)
+  {
+    float lastPressureAvg = getLastPressureSamplesAverage();
+    float change = (lastPressureAvg - pressureAvg) * CONVERSION_FACTOR;
+    if (firstRound) //first time initial 3 hour
+    {
+      dP_dt = change; //note this is for t = 1 hour
+    }
+    else
+    {
+      dP_dt = change / 2; //divide by 2 as this is the difference in time from 0 value
+    }
+  }
+  else if (minuteCount == 95)
+  {
+    float lastPressureAvg = getLastPressureSamplesAverage();
+    float change = (lastPressureAvg - pressureAvg) * CONVERSION_FACTOR;
+    if (firstRound) // first time initial 3 hour
+    {
+      dP_dt = change / 1.5; // note this is for t = 1.5 hour
+    }
+    else
+    {
+      dP_dt = change / 2.5; // divide by 2.5 as this is the difference in time from 0 value
+    }
+  }
+  else if (minuteCount == 125)
+  {
+    float lastPressureAvg = getLastPressureSamplesAverage();
+    pressureAvg2 = lastPressureAvg; // store for later use.
+    float change = (lastPressureAvg - pressureAvg) * CONVERSION_FACTOR;
+    if (firstRound) // first time initial 3 hour
+    {
+      dP_dt = change / 2; // note this is for t = 2 hour
+    }
+    else
+    {
+      dP_dt = change / 3; // divide by 3 as this is the difference in time from 0 value
+    }
+  }
+  else if (minuteCount == 155)
+  {
+    float lastPressureAvg = getLastPressureSamplesAverage();
+    float change = (lastPressureAvg - pressureAvg) * CONVERSION_FACTOR;
+    if (firstRound) // first time initial 3 hour
+    {
+      dP_dt = change / 2.5; // note this is for t = 2.5 hour
+    }
+    else
+    {
+      dP_dt = change / 3.5; // divide by 3.5 as this is the difference in time from 0 value
+    }
+  }
+  else if (minuteCount == 185)
+  {
+    float lastPressureAvg = getLastPressureSamplesAverage();
+    float change = (lastPressureAvg - pressureAvg) * CONVERSION_FACTOR;
+    if (firstRound) // first time initial 3 hour
+    {
+      dP_dt = change / 3; // note this is for t = 3 hour
+    }
+    else
+    {
+      dP_dt = change / 4; // divide by 4 as this is the difference in time from 0 value
+    }
+    pressureAvg = pressureAvg2; // Equating the pressure at 0 to the pressure at 2 hour after 3 hours have past.
+    firstRound = false; // flag to let you know that this is on the past 3 hour mark. Initialized to 0 outside main loop.
+  }
+
+  int forecast = UNKNOWN;
+  if (minuteCount < 35 && firstRound) //if time is less than 35 min on the first 3 hour interval.
+  {
+    forecast = UNKNOWN;
+  }
+  else if (dP_dt < (-0.25))
+  {
+    forecast = THUNDERSTORM;
+  }
+  else if (dP_dt > 0.25)
+  {
+    forecast = UNSTABLE;
+  }
+  else if ((dP_dt > (-0.25)) && (dP_dt < (-0.05)))
+  {
+    forecast = CLOUDY;
+  }
+  else if ((dP_dt > 0.05) && (dP_dt < 0.25))
+  {
+    forecast = SUNNY;
+  }
+  else if ((dP_dt >(-0.05)) && (dP_dt < 0.05))
+  {
+    forecast = STABLE;
+  }
+  else
+  {
+    forecast = UNKNOWN;
+  }
+
+  // uncomment when debugging
+  //Serial.print(F("Forecast at minute "));
+  //Serial.print(minuteCount);
+  //Serial.print(F(" dP/dt = "));
+  //Serial.print(dP_dt);
+  //Serial.print(F("kPa/h --> "));
+  //Serial.println(weather[forecast]);
+
+  return forecast;
 }
