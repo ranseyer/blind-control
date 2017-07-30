@@ -1,15 +1,16 @@
 /*
  * Changelog: Kommentare zum weiteren Vorgehen eingefügt
- * BME280 eingefügt (ohne Pressure)
+ * BME280 eingefügt mit pressure und forecast
  */
 
 #define SN "DoubleCover"
-#define SV "0.3.0"
+#define SV "0.3.1"
 
-#define MY_DEBUG
+//#define MY_DEBUG
 //#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
 // Enable RS485 transport layer
 #define MY_RS485
+//#define MY_RS485_HWSERIAL Serial
 // Define this to enables DE-pin management on defined pin
 #define MY_RS485_DE_PIN 2
 // Set RS485 baud rate to use
@@ -302,14 +303,22 @@ void loop()
     }
   }
 
-/*  if (currentTime - lastSendBme > bmeDelayTime) {
-  
-    float pressure = bmp.pres() / 100.0;
-    
+  if (currentTime - lastSendBme > bmeDelayTime) {
+    float pressure_local = bme.pres();                    // Get pressure at current location
+    float pressure = pressure_local/pow((1.0 - ( ALTITUDE / 44330.0 )), 5.255); // Adjust to sea level pressure using user altitude
     int forecast = sample(pressure);
+    if (pressure != lastPressure) {
+      send(pressureMsg.set(pressure, 2));
+      lastPressure = pressure;
+    }
+
+    if (forecast != lastForecast){
+      send(forecastMsg.set(weather[forecast]));
+      lastForecast = forecast;
+    }
   }
 
-*/
+
 
 /*  
  * Braucht es den Autostart-Teil bei zentraler Steuerung?   
