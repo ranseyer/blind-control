@@ -5,7 +5,7 @@
  */
 
 #define SN "DoubleCover"
-#define SV "0.2.0" //Das darf jetzt ruhig mal sein
+#define SV "0.2.2" //Das darf jetzt ruhig mal sein
 
 //#define MY_DEBUG
 //#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
@@ -73,9 +73,9 @@ const int SwEmergency = 5;
 // Output Pins
 //dto zum obigen Array
 const int JalOn = 10;
-const int JalDown = 11;
+const int JalDown = 12;
 //const int JalRevers = 12;
-const int MarkOn = 12;
+const int MarkOn = 11;
 const int MarkDown = 13;
 
 /*Die States könnten vermutlich auch bool sein (Speicher...)
