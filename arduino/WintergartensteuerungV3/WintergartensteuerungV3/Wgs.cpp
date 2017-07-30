@@ -14,7 +14,11 @@ const int STATE_DISABLING = 2;
 const int STATE_DISABLED = 3;
 const int STATE_ENABLING = 4;
 
-Wgs::Wgs() {}
+//<<<<<<< rejoe2-Array
+//Wgs::Wgs() {}
+//=======
+Wgs::Wgs(void) {}
+//>>>>>>> master
 
 void Wgs::setPins(uint8_t pin_on, uint8_t pin_down, long duration)
 {
@@ -23,7 +27,11 @@ void Wgs::setPins(uint8_t pin_on, uint8_t pin_down, long duration)
   _duration = duration;
 }
   
-Wgs::Wgs(uint8_t pin_on, uint8_t pin_down, long duration)
+//<<<<<<< rejoe2-Array
+//Wgs::Wgs(uint8_t pin_on, uint8_t pin_down, long duration)
+//=======
+Wgs::Wgs(int pin_on, int pin_down, long duration)
+//>>>>>>> master
 {
 	//pinMode(pin, OUTPUT);
 	setPins(pin_on, pin_down, duration);
