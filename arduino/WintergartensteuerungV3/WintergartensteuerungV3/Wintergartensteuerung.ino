@@ -72,11 +72,11 @@ const int SwEmergency = 5;
 
 // Output Pins
 //dto zum obigen Array
-const int JalOn = 10;
-const int JalDown = 12;
+const int JalOn = 10;   // activates relais 2
+const int JalDown = 12; // activates relais1+2
 //const int JalRevers = 12;
-const int MarkOn = 11;
-const int MarkDown = 13;
+const int MarkOn = 11; // activates relais 4
+const int MarkDown = 13; // activates relais 3+4
 
 /*Die States könnten vermutlich auch bool sein (Speicher...)
 und die Cover-spezifischen könnte man in einem Array organisieren
