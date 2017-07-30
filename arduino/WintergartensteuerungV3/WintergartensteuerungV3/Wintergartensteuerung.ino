@@ -21,10 +21,10 @@
 #include <SPI.h>
 #include <BH1750.h>
 #include <Bounce2.h>
-#include "Wgs.h" 
+#include "Wgs.h"
 // For RTC
 #include "Wire.h" //warum andere Schreibweise ?
-#include <TimeLib.h> 
+#include <TimeLib.h>
 #include <DS3232RTC.h>
 #define DS3231_I2C_ADDRESS 0x68 //könnte man evtl. umstellen, auf die RTC-lib
 //#include <LiquidCrystal_I2C.h>
@@ -37,16 +37,16 @@ unsigned long DISPLAY_UPDATE_FREQUENCY = 300; // (in milliseconds)
 unsigned long lastUpdateDisplay = 0;
 
 /*für RTC; code ist von hier: https://www.mysensors.org/build/display
-Da steht auch, wie man ein I2C-Display ansteuert... 
+Da steht auch, wie man ein I2C-Display ansteuert...
 und die Zeit vom Controller holt
 */
 bool timeReceived = false;
 unsigned long lastUpdate=0, lastRequest=0;
 
-// Initialize display. Google the correct settings for your display. 
+// Initialize display. Google the correct settings for your display.
 // The follwoing setting should work for the recommended display in the MySensors "shop".
 //LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); //Funktionierte leider beim compilieren nicht, daher deaktiviert
-//LiquidCrystal_I2C lcd(1); 
+//LiquidCrystal_I2C lcd(1);
 
 #define CHILD_ID_LIGHT 0
 #define CHILD_ID_RAIN 1   // Id of the sensor child
@@ -54,7 +54,7 @@ unsigned long lastUpdate=0, lastRequest=0;
 #define MAX_COVERS 2
 
 // Input Pins for Switch Markise Up/Down
-/*Könnte man für jeweils die zu einem Cover gehörenden PINs auch über eine Array-Funktion lösen, 
+/*Könnte man für jeweils die zu einem Cover gehörenden PINs auch über eine Array-Funktion lösen,
  damit man dann zur Initialisierung, Abfrage etc. einfach eine Schleife drüberlegen kann.
  Also etwa so:
  const int INPUT_PINS[MAX_COVERS] = {
@@ -98,8 +98,12 @@ boolean autostart_done = false;
 /*Allerdings habe ich keine Idee, wie man die Devices
 Innerhalb einer Schleife sinnvoll anlegen kann.
 Vielleicht hat Dein Sohn da eine Idee*/
-Wgs mark(MarkOn, MarkDown, 55000);
-Wgs jal(JalOn, JalDown, 55000);
+//Wgs mark(MarkOn, MarkDown, 55000);
+//Wgs jal(JalOn, JalDown, 55000);
+// Kürzer für Test
+Wgs mark(MarkOn, MarkDown, 6000);
+Wgs jal(JalOn, JalDown, 6000);
+
 
 BH1750 lightSensor;
 uint16_t lastlux = 0;
@@ -132,7 +136,7 @@ MyMessage statusMessage(First_CHILD_ID_COVER, V_STATUS);
 MyMessage msgRain(CHILD_ID_RAIN, V_RAIN);
 MyMessage msgLux(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
 
-/*Auck keine Ahnung, ob Bounce mit einem Anlegen 
+/*Auck keine Ahnung, ob Bounce mit einem Anlegen
  * über ein Array klarkäme
  */
 Bounce debounceJalUp    = Bounce();
@@ -155,41 +159,40 @@ void before()
   /*
    * Mal exemplarisch für Markise umsortiert, wie man das im Ramhen eines Arrays aufrufen würde
    */
-  
+
   // Initialize In-/Outputs
-  pinMode(SwMarkUp, INPUT_PULLUP);
-  debounceMarkUp.attach(SwMarkUp);
-  debounceMarkUp.interval(5);
   pinMode(MarkOn, OUTPUT);
-  digitalWrite(MarkOn, HIGH);
-  pinMode(SwMarkDown, INPUT_PULLUP);
   pinMode(MarkDown, OUTPUT);
+  digitalWrite(MarkOn, HIGH);
   digitalWrite(MarkDown, HIGH);
-  
-  pinMode(SwJalUp, INPUT_PULLUP);
-  pinMode(SwJalDown, INPUT_PULLUP);
   pinMode(JalOn, OUTPUT);
   pinMode(JalDown, OUTPUT);
   digitalWrite(JalOn, HIGH);
   digitalWrite(JalDown, HIGH);
 
+  pinMode(SwJalUp, INPUT_PULLUP);
+  pinMode(SwJalDown, INPUT_PULLUP);
+  pinMode(SwMarkUp, INPUT_PULLUP);
+  pinMode(SwMarkDown, INPUT_PULLUP);
+  pinMode(SwEmergency, INPUT_PULLUP);
+
   // After setting up the button, setup debouncer
+  debounceMarkUp.attach(SwMarkUp);
+  debounceMarkUp.interval(5);
+  debounceMarkDown.attach(SwMarkDown);
+  debounceMarkDown.interval(5);
   debounceJalUp.attach(SwJalUp);
   debounceJalUp.interval(5);
   debounceJalDown.attach(SwJalDown);
   debounceJalDown.interval(5);
-  debounceMarkDown.attach(SwMarkDown);
-  debounceMarkDown.interval(5);
-  
-  pinMode(SwEmergency, INPUT_PULLUP);
   debounceMarkEmergency.attach(SwEmergency);
   debounceMarkEmergency.interval(5);
-  
+
   Wire.begin();
   lightSensor.begin();
   //Serial.begin(57600);
 
-  setSyncProvider(RTC.get);  
+  setSyncProvider(RTC.get);
 
 }
 
@@ -209,7 +212,7 @@ void setup() {
     sendState(i, First_CHILD_ID_COVER+i);
   }
   // Request latest time from controller at startup
-  requestTime(); 
+  requestTime();
 }
 
 void loop()
@@ -226,21 +229,21 @@ void loop()
 
   unsigned long currentTime = millis();
 
-  //Könnte auch weg, wenn kein Display mehr angeschlossen werden soll
-  if (currentTime - lastUpdateDisplay > DISPLAY_UPDATE_FREQUENCY) {
-    lastUpdateDisplay = currentTime;
-    displayTime();
-    //updateDisplay();
-  }
+//  //Könnte auch weg, wenn kein Display mehr angeschlossen werden soll
+//  if (currentTime - lastUpdateDisplay > DISPLAY_UPDATE_FREQUENCY) {
+//    lastUpdateDisplay = currentTime;
+//    displayTime();
+//    //updateDisplay();
+//  }
   // If no time has been received yet, request it every 10 second from controller
   // When time has been received, request update every hour
   if ((!timeReceived && (currentTime-lastRequest) > (10UL*1000UL))
     || (timeReceived && (currentTime-lastRequest) > (60UL*1000UL*60UL))) {
-    // Request time from controller. 
+    // Request time from controller.
 #ifdef MY_DEBUG_LOCAL
     Serial.println("requesting time");
 #endif
-    requestTime();  
+    requestTime();
     lastRequest = currentTime;
   }
 
@@ -287,13 +290,13 @@ void loop()
     if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
       sendState(i, First_CHILD_ID_COVER+i);
 /*
- * Hier könnte man einen Timer einfügen, der die Zeit erfaßt, 
+ * Hier könnte man einen Timer einfügen, der die Zeit erfaßt,
  * die das jeweilige Cover fährt und daraus einen %-Wert errechnen.
  * Den könnte man dann bei Überschreitung einer gewissen Hysterese
  * senden bzw. dann, wenn ein Stop-Befehl kommt.
  * Weiter könnte man darüber vergleichen, ob das jeweilige Cover
  * seinen Sollwert erreicht hat und dann die Fahrt abbrechen.
- * Dazu bräuchte man aber (mindestens) die Fahrtdauern hoch bzw. runter, 
+ * Dazu bräuchte man aber (mindestens) die Fahrtdauern hoch bzw. runter,
  * die man in VAR1 und VAR2 vom Controller erfragen könnte bzw.
  * mit einem Standardwert vorbelegen.
  * Zielwert bei Tastendruck löschen?
@@ -455,7 +458,7 @@ void displayTime()
 }
 
 void receiveTime(unsigned long controllerTime) {
-  // Ok, set incoming time 
+  // Ok, set incoming time
  #ifdef MY_DEBUG_LOCAL
   Serial.print("Time value received: ");
   Serial.println(controllerTime);
@@ -467,31 +470,26 @@ void receiveTime(unsigned long controllerTime) {
 /*void updateDisplay(){
   tmElements_t tm;
   RTC.read(tm);
-
-  // Print date and time 
+  // Print date and time
   lcd.home();
   lcd.print(tm.Day);
   lcd.print("/");
   lcd.print(tm.Month);
 //  lcd.print(" ");
 //  lcd.print(tmYearToCalendar(tm.Year)-2000);
-
   lcd.print(" ");
   printDigits(tm.Hour);
   lcd.print(":");
   printDigits(tm.Minute);
   lcd.print(":");
   printDigits(tm.Second);
-
   // Go to next line and print temperature
-  lcd.setCursor ( 0, 1 );  
+  lcd.setCursor ( 0, 1 );
   lcd.print("Temp: ");
   lcd.print(RTC.temperature()/4);
   lcd.write(223); // Degree-sign
   lcd.print("C");
 }
-
-
 void printDigits(int digits){
   if(digits < 10)
     lcd.print('0');
