@@ -1,7 +1,5 @@
 /*
  * Changelog: Kommentare zum weiteren Vorgehen eingefügt
- * Die Zuordnung der Relais habe ich nicht verstanden,
- * wo das zu korrigieren ist
  */
 
 #define SN "DoubleCover"
@@ -22,31 +20,12 @@
 #include <BH1750.h>
 #include <Bounce2.h>
 #include "Wgs.h"
-// For RTC
-#include "Wire.h" //warum andere Schreibweise ?
-#include <TimeLib.h>
-#include <DS3232RTC.h>
-#define DS3231_I2C_ADDRESS 0x68 //könnte man evtl. umstellen, auf die RTC-lib
-//#include <LiquidCrystal_I2C.h>
+#include <Wire.h>
 #include <MySensors.h>
 
 //für die millis()-Berechnung, wann wieder gesendet werden soll
 unsigned long SEND_FREQUENCY = 180000; // Sleep time between reads (in milliseconds)
 unsigned long lastSend = 0;
-unsigned long DISPLAY_UPDATE_FREQUENCY = 300; // (in milliseconds)
-unsigned long lastUpdateDisplay = 0;
-
-/*für RTC; code ist von hier: https://www.mysensors.org/build/display
-Da steht auch, wie man ein I2C-Display ansteuert...
-und die Zeit vom Controller holt
-*/
-bool timeReceived = false;
-unsigned long lastUpdate=0, lastRequest=0;
-
-// Initialize display. Google the correct settings for your display.
-// The follwoing setting should work for the recommended display in the MySensors "shop".
-//LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); //Funktionierte leider beim compilieren nicht, daher deaktiviert
-//LiquidCrystal_I2C lcd(1);
 
 #define CHILD_ID_LIGHT 0
 #define CHILD_ID_RAIN 1   // Id of the sensor child
@@ -190,10 +169,6 @@ void before()
 
   Wire.begin();
   lightSensor.begin();
-  //Serial.begin(57600);
-
-  setSyncProvider(RTC.get);
-
 }
 
 void presentation() {
@@ -211,8 +186,6 @@ void setup() {
   for (int i = 0; i < MAX_COVERS; i++) {
     sendState(i, First_CHILD_ID_COVER+i);
   }
-  // Request latest time from controller at startup
-  requestTime();
 }
 
 void loop()
@@ -229,24 +202,6 @@ void loop()
 
   unsigned long currentTime = millis();
 
-//  //Könnte auch weg, wenn kein Display mehr angeschlossen werden soll
-//  if (currentTime - lastUpdateDisplay > DISPLAY_UPDATE_FREQUENCY) {
-//    lastUpdateDisplay = currentTime;
-//    displayTime();
-//    //updateDisplay();
-//  }
-  // If no time has been received yet, request it every 10 second from controller
-  // When time has been received, request update every hour
-  if ((!timeReceived && (currentTime-lastRequest) > (10UL*1000UL))
-    || (timeReceived && (currentTime-lastRequest) > (60UL*1000UL*60UL))) {
-    // Request time from controller.
-#ifdef MY_DEBUG_LOCAL
-    Serial.println("requesting time");
-#endif
-    requestTime();
-    lastRequest = currentTime;
-  }
-
   // Only send values at a maximum frequency
   if (currentTime - lastSend > SEND_FREQUENCY) {
     lastSend = currentTime;
@@ -262,7 +217,9 @@ void loop()
     send(msgRain.set(emergency));
   }
 
-  //Autostart code
+/*  
+ * Braucht es den Autostart-Teil bei zentraler Steuerung?   
+ //Autostart code
   autostart_check_tick++;
   if(autostart_check_tick >= autostart_check_delay){
     autostart_check_tick = 0;
@@ -282,7 +239,7 @@ void loop()
       }
     }
   }
-
+*/
   State[0]=mark.loop(button_mark_up, button_mark_down);
   State[1]=jal.loop(button_jal_up, button_jal_down);
 
@@ -371,8 +328,6 @@ void receive(const MyMessage &message) {
       }
     }
 
-
-    //deaktiviert, da FHEM das ohne Änderung der .pm noch nicht senden dürfte...
     if (message.type == V_UP && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
       // Set state to covering up and send it back to the gateway.
       State[message.sensor-First_CHILD_ID_COVER] = UP;
@@ -410,95 +365,6 @@ void receive(const MyMessage &message) {
       Serial.println(message.sensor);
 #endif
     }
-  //hier gehört die Doppelung für das 2. Coverr hin
+  //hier gehört die Doppelung für das 2. Cover hin
   }
 }
-
-void readDS3231time(byte *second,
-byte *minute,
-byte *hour,
-byte *dayOfWeek,
-byte *dayOfMonth,
-byte *month,
-byte *year)
-{
-  Wire.beginTransmission(DS3231_I2C_ADDRESS);
-  Wire.write(0); // set DS3231 register pointer to 00h
-  Wire.endTransmission();
-  Wire.requestFrom(DS3231_I2C_ADDRESS, 7);
-  // request seven bytes of data from DS3231 starting from register 00h
-  *second = bcdToDec(Wire.read() & 0x7f);
-  *minute = bcdToDec(Wire.read());
-  *hour = bcdToDec(Wire.read() & 0x3f);
-  *dayOfWeek = bcdToDec(Wire.read());
-  *dayOfMonth = bcdToDec(Wire.read());
-  *month = bcdToDec(Wire.read());
-  *year = bcdToDec(Wire.read());
-}
-
-void displayTime()
-{
-  byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
-  // retrieve data from DS3231
-  readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month,  &year);
-  // send it to the serial monitor
-  Serial.print(hour, DEC);
-  // convert the byte variable to a decimal number when displayed
-  Serial.print(":");
-  if (minute<10)
-  {
-    Serial.print("0");
-  }
-  Serial.print(minute, DEC);
-  Serial.print(":");
-  if (second<10)
-  {
-    Serial.print("0");
-  }
-  Serial.print(second, DEC);
-  Serial.print(" ");
-  Serial.print(dayOfMonth, DEC);
-  Serial.print("/");
-  Serial.print(month, DEC);
-  Serial.print("/");
-  Serial.println(year, DEC);
-}
-
-void receiveTime(unsigned long controllerTime) {
-  // Ok, set incoming time
- #ifdef MY_DEBUG_LOCAL
-  Serial.print("Time value received: ");
-  Serial.println(controllerTime);
-#endif
-  RTC.set(controllerTime); // this sets the RTC to the time from controller - which we do want periodically
-  timeReceived = true;
-}
-
-/*void updateDisplay(){
-  tmElements_t tm;
-  RTC.read(tm);
-  // Print date and time
-  lcd.home();
-  lcd.print(tm.Day);
-  lcd.print("/");
-  lcd.print(tm.Month);
-//  lcd.print(" ");
-//  lcd.print(tmYearToCalendar(tm.Year)-2000);
-  lcd.print(" ");
-  printDigits(tm.Hour);
-  lcd.print(":");
-  printDigits(tm.Minute);
-  lcd.print(":");
-  printDigits(tm.Second);
-  // Go to next line and print temperature
-  lcd.setCursor ( 0, 1 );
-  lcd.print("Temp: ");
-  lcd.print(RTC.temperature()/4);
-  lcd.write(223); // Degree-sign
-  lcd.print("C");
-}
-void printDigits(int digits){
-  if(digits < 10)
-    lcd.print('0');
-  lcd.print(digits);
-}*/
