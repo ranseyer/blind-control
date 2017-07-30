@@ -1,10 +1,11 @@
 /*
  * Changelog: Kommentare zum weiteren Vorgehen eingefügt
- * BME280 eingefügt mit pressure und forecast
+ * BME280 deaktiviert
+ * Array-Aufruf reingemacht
  */
 
 #define SN "DoubleCover"
-#define SV "0.3.1"
+#define SV "0.3.2"
 
 //#define MY_DEBUG
 //#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
@@ -74,12 +75,12 @@ const int MarkDown = 13; // activates relais 3+4
 /*Die States könnten vermutlich auch bool sein (Speicher...)
 und die Cover-spezifischen könnte man in einem Array organisieren
  */
-int MarkUpState = 0;
-int MarkDownState = 0;
-int JalUpState = 0;
-int JalDownState = 0;
-int JalReverseState = 0;
-int EmergencyState = 0;
+bool MarkUpState = 0;
+bool MarkDownState = 0;
+bool JalUpState = 0;
+bool JalDownState = 0;
+bool JalReverseState = 0;
+bool EmergencyState = 0;
 
 //autostart
 const int autostart_time = 9;
@@ -94,9 +95,11 @@ Vielleicht hat Dein Sohn da eine Idee*/
 //Wgs mark(MarkOn, MarkDown, 55000);
 //Wgs jal(JalOn, JalDown, 55000);
 // Kürzer für Test
-Wgs mark(MarkOn, MarkDown, 6000);
-Wgs jal(JalOn, JalDown, 6000);
-
+//Array-Test
+Wgs Cover[MAX_COVERS]= {
+  {MarkOn, MarkDown, 6000},
+  {JalOn, JalDown, 6000}
+};
 
 BH1750 lightSensor;
 uint16_t lastlux = 0;
@@ -221,7 +224,7 @@ void before()
 
   Wire.begin();
   lightSensor.begin();
-  bme.begin();
+  //bme.begin();
 }
 
 void presentation() {
@@ -254,7 +257,7 @@ void loop()
   bool button_jal_down = digitalRead(SwJalDown) == LOW;
   bool emergency = digitalRead(SwEmergency) == LOW; //Current use: in case of rain
 
-  mark.setDisable(emergency);
+  Cover[0].setDisable(emergency);
 
   unsigned long currentTime = millis();
 
@@ -272,7 +275,7 @@ void loop()
     }
     send(msgRain.set(emergency));
     
-    float temperature = bme.temp(metric);
+/*    float temperature = bme.temp(metric);
     if (isnan(temperature)) {
 #ifdef MY_DEBUG_LOCAL
     Serial.println("Failed reading temperature");
@@ -300,10 +303,10 @@ void loop()
       Serial.print("H: ");
       Serial.println(humidity);
 #endif
-    }
+    }*/
   }
 
-  if (currentTime - lastSendBme > bmeDelayTime) {
+/*  if (currentTime - lastSendBme > bmeDelayTime) {
     float pressure_local = bme.pres();                    // Get pressure at current location
     float pressure = pressure_local/pow((1.0 - ( ALTITUDE / 44330.0 )), 5.255); // Adjust to sea level pressure using user altitude
     int forecast = sample(pressure);
@@ -316,7 +319,7 @@ void loop()
       send(forecastMsg.set(weather[forecast]));
       lastForecast = forecast;
     }
-  }
+  }*/
 
 
 
@@ -343,10 +346,10 @@ void loop()
     }
   }
 */
-  State[0]=mark.loop(button_mark_up, button_mark_down);
-  State[1]=jal.loop(button_jal_up, button_jal_down);
-
+  State[0]=Cover[0].loop(button_mark_up, button_mark_down);
+  State[1]=Cover[1].loop(button_jal_up, button_jal_down);
   for (int i = 0; i < MAX_COVERS; i++) {
+ 
     if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
       sendState(i, First_CHILD_ID_COVER+i);
 /*
@@ -376,9 +379,9 @@ void loop()
 void receive(const MyMessage &message) {
 
   //Diesen Teil später doppeln für den 2. Cover, solange Indexierung nicht läuft
-  if (message.sensor == First_CHILD_ID_COVER) {
+  if (message.sensor >= First_CHILD_ID_COVER && message.sensor <= First_CHILD_ID_COVER+MAX_COVERS) {
       if (message.isAck()) {
-      Serial.println("Ack child1 from gw rec.");
+      Serial.println(F("Ack child1 from gw rec."));
     }
     if (message.type == V_DIMMER) { // This could be M_ACK_VARIABLE or M_SET_VARIABLE
       int val = message.getInt();
@@ -393,11 +396,11 @@ void receive(const MyMessage &message) {
       if (val < 50 && State[message.sensor-First_CHILD_ID_COVER] != 2 && State[message.sensor-First_CHILD_ID_COVER] != 3) {
         //Up
         if (State[message.sensor-First_CHILD_ID_COVER] != 0) {
-          mark.loop(true, false);
+          Cover[message.sensor-First_CHILD_ID_COVER].loop(true, false);
         }
         //bool button_mark_up=true;
         //bool button_mark_down=false;
-        mark.loop(true, false);
+        Cover[message.sensor-First_CHILD_ID_COVER].loop(true, false);
 
 #ifdef MY_DEBUG_LOCAL
     Serial.print("GW Message up: ");
@@ -408,7 +411,7 @@ void receive(const MyMessage &message) {
         //Stop
         bool button_mark_up=false;
         bool button_mark_down=false;
-        mark.loop(button_mark_up, button_mark_down);
+        Cover[message.sensor-First_CHILD_ID_COVER].loop(false, false);
 
 #ifdef MY_DEBUG_LOCAL
     Serial.print("GW Message stop: ");
@@ -418,11 +421,11 @@ void receive(const MyMessage &message) {
       else if (val >50 && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
        //Up
        if (State[message.sensor-First_CHILD_ID_COVER] != 0) {
-          mark.loop(false, true);
+          Cover[message.sensor-First_CHILD_ID_COVER].loop(false, true);
         }
         //bool button_mark_up=false;
         //bool button_mark_down=true;
-        mark.loop(false, true);
+        Cover[message.sensor-First_CHILD_ID_COVER].loop(false, true);
 
 #ifdef MY_DEBUG_LOCAL
     Serial.print("GW Msg down: ");
@@ -433,10 +436,10 @@ void receive(const MyMessage &message) {
 
     if (message.type == V_UP && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
       // Set state to covering up and send it back to the gateway.
-      State[message.sensor-First_CHILD_ID_COVER] = UP;
-      bool button_mark_up=true;
-      bool button_mark_down=false;
-      mark.loop(button_mark_up, button_mark_down);
+      //State[message.sensor-First_CHILD_ID_COVER] = UP;
+      //bool button_mark_up=true;
+      //bool button_mark_down=false;
+      Cover[message.sensor-First_CHILD_ID_COVER].loop(true, false);
       //sendState();
 #ifdef MY_DEBUG_LOCAL
     Serial.print("GW Msg up, C ");
@@ -446,33 +449,32 @@ void receive(const MyMessage &message) {
     }
     if (message.type == V_DOWN && State[message.sensor-First_CHILD_ID_COVER] != 2 && State[message.sensor-First_CHILD_ID_COVER] != 3) {
       // Set state to covering up and send it back to the gateway.
-      State[message.sensor-First_CHILD_ID_COVER] = DOWN;
-      bool button_mark_up=false;
-      bool button_mark_down=true;
-      mark.loop(button_mark_up, button_mark_down);
+      //State[message.sensor-First_CHILD_ID_COVER] = DOWN;
+      //bool button_mark_up=false;
+      //bool button_mark_down=true;
+      Cover[message.sensor-First_CHILD_ID_COVER].loop(false, true);
 
 #ifdef MY_DEBUG_LOCAL
-    Serial.print("GW Msg down, C ");
+    Serial.print(F("GW Msg down, C "));
     Serial.println(message.sensor);
 #endif
     }
 
     if (message.type == V_STOP) {
       // Set state to idle and send it back to the gateway.
-      State[message.sensor-First_CHILD_ID_COVER] = IDLE;
-      bool button_mark_up=false;
-      bool button_mark_down=false;
-      mark.loop(button_mark_up, button_mark_down);
+      //State[message.sensor-First_CHILD_ID_COVER] = IDLE;
+      //bool button_mark_up=false;
+      //bool button_mark_down=false;
+      Cover[message.sensor-First_CHILD_ID_COVER].loop(false, false);
 #ifdef MY_DEBUG_LOCAL
-      Serial.print("GW Msg stop, C ");
+      Serial.print(F("GW Msg stop, C "));
       Serial.println(message.sensor);
 #endif
     }
-  //hier gehört die Doppelung für das 2. Cover hin
   }
 }
 
-float getLastPressureSamplesAverage()
+/*float getLastPressureSamplesAverage()
 {
   float lastPressureSamplesAverage = 0;
   for (int i = 0; i < LAST_SAMPLES_COUNT; i++)
@@ -625,4 +627,4 @@ int sample(float pressure)
   //Serial.println(weather[forecast]);
 
   return forecast;
-}
+}*/
