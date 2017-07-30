@@ -1,16 +1,17 @@
 /*
  * Changelog: Kommentare zum weiteren Vorgehen eingefügt
- * Die Zuordnung der Relais habe ich nicht verstanden,
- * wo das zu korrigieren ist
+ * BME280 deaktiviert
+ * Array-Aufruf reingemacht
  */
 
 #define SN "DoubleCover"
-#define SV "0.2.5"
+#define SV "0.3.2"
 
-#define MY_DEBUG
+//#define MY_DEBUG
 //#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
 // Enable RS485 transport layer
 #define MY_RS485
+//#define MY_RS485_HWSERIAL Serial
 // Define this to enables DE-pin management on defined pin
 #define MY_RS485_DE_PIN 2
 // Set RS485 baud rate to use
@@ -24,34 +25,27 @@
 #include "Wgs.h"
 // For RTC
 #include "Wire.h" //warum andere Schreibweise ?
-#include <TimeLib.h>
-#include <DS3232RTC.h>
-#define DS3231_I2C_ADDRESS 0x68 //könnte man evtl. umstellen, auf die RTC-lib
-//#include <LiquidCrystal_I2C.h>
+#include <BME280I2C.h> // From Library Manager, comes with the BME280-lib by Tyler Glenn
+
 #include <MySensors.h>
 
 //für die millis()-Berechnung, wann wieder gesendet werden soll
 unsigned long SEND_FREQUENCY = 180000; // Sleep time between reads (in milliseconds)
 unsigned long lastSend = 0;
-unsigned long DISPLAY_UPDATE_FREQUENCY = 300; // (in milliseconds)
-unsigned long lastUpdateDisplay = 0;
-
-/*für RTC; code ist von hier: https://www.mysensors.org/build/display
-Da steht auch, wie man ein I2C-Display ansteuert...
-und die Zeit vom Controller holt
-*/
-bool timeReceived = false;
-unsigned long lastUpdate=0, lastRequest=0;
-
-// Initialize display. Google the correct settings for your display.
-// The follwoing setting should work for the recommended display in the MySensors "shop".
-//LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); //Funktionierte leider beim compilieren nicht, daher deaktiviert
-//LiquidCrystal_I2C lcd(1);
 
 #define CHILD_ID_LIGHT 0
 #define CHILD_ID_RAIN 1   // Id of the sensor child
 #define First_CHILD_ID_COVER 2
 #define MAX_COVERS 2
+
+#define BARO_CHILD 10
+#define TEMP_CHILD 11
+#define HUM_CHILD 12
+
+BME280I2C bme;
+const float ALTITUDE = 200; // <-- adapt this value to your location's altitude (in m). Use your smartphone GPS to get an accurate value!
+unsigned long lastSendBme = 0;
+//#define SEALEVELPRESSURE_HPA (1013.25)
 
 // Input Pins for Switch Markise Up/Down
 /*Könnte man für jeweils die zu einem Cover gehörenden PINs auch über eine Array-Funktion lösen,
@@ -81,12 +75,12 @@ const int MarkDown = 13; // activates relais 3+4
 /*Die States könnten vermutlich auch bool sein (Speicher...)
 und die Cover-spezifischen könnte man in einem Array organisieren
  */
-int MarkUpState = 0;
-int MarkDownState = 0;
-int JalUpState = 0;
-int JalDownState = 0;
-int JalReverseState = 0;
-int EmergencyState = 0;
+bool MarkUpState = 0;
+bool MarkDownState = 0;
+bool JalUpState = 0;
+bool JalDownState = 0;
+bool JalReverseState = 0;
+bool EmergencyState = 0;
 
 //autostart
 const int autostart_time = 9;
@@ -101,9 +95,11 @@ Vielleicht hat Dein Sohn da eine Idee*/
 //Wgs mark(MarkOn, MarkDown, 55000);
 //Wgs jal(JalOn, JalDown, 55000);
 // Kürzer für Test
-Wgs mark(MarkOn, MarkDown, 6000);
-Wgs jal(JalOn, JalDown, 6000);
-
+//Array-Test
+Wgs Cover[MAX_COVERS]= {
+  {MarkOn, MarkDown, 6000},
+  {JalOn, JalDown, 6000}
+};
 
 BH1750 lightSensor;
 uint16_t lastlux = 0;
@@ -145,6 +141,44 @@ Bounce debounceMarkEmergency  = Bounce();
 Bounce debounceMarkUp    = Bounce();
 Bounce debounceMarkDown  = Bounce();
 
+//bme: Value according to MySensors for forecast accuracy
+unsigned long bmeDelayTime = 60000;
+
+const char *weather[] = { "stable", "sunny", "cloudy", "unstable", "thunderstorm", "unknown" };
+enum FORECAST
+{
+    STABLE = 0,            // "Stable Weather Pattern"
+    SUNNY = 1,            // "Slowly rising Good Weather", "Clear/Sunny "
+    CLOUDY = 2,            // "Slowly falling L-Pressure ", "Cloudy/Rain "
+    UNSTABLE = 3,        // "Quickly rising H-Press",     "Not Stable"
+    THUNDERSTORM = 4,    // "Quickly falling L-Press",    "Thunderstorm"
+    UNKNOWN = 5            // "Unknown (More Time needed)
+};
+
+float lastPressure = -1;
+float lastTemp = -1;
+float lastHum = -1;
+int lastForecast = -1;
+
+const int LAST_SAMPLES_COUNT = 5;
+float lastPressureSamples[LAST_SAMPLES_COUNT];
+// this CONVERSION_FACTOR is used to convert from Pa to kPa in forecast algorithm
+// get kPa/h be dividing hPa by 10 
+#define CONVERSION_FACTOR (1.0/10.0)
+
+int minuteCount = 0;
+bool firstRound = true;
+// average value is used in forecast algorithm.
+float pressureAvg;
+// average after 2 hours is used as reference value for the next iteration.
+float pressureAvg2;
+
+float dP_dt;
+bool metric = true;
+MyMessage tempMsg(TEMP_CHILD, V_TEMP);
+MyMessage pressureMsg(BARO_CHILD, V_PRESSURE);
+MyMessage forecastMsg(BARO_CHILD, V_FORECAST);
+MyMessage humMsg(HUM_CHILD, V_HUM);
 
 void sendState(int val1, int sensorID) {
   // Send current state and status to gateway.
@@ -190,10 +224,7 @@ void before()
 
   Wire.begin();
   lightSensor.begin();
-  //Serial.begin(57600);
-
-  setSyncProvider(RTC.get);
-
+  //bme.begin();
 }
 
 void presentation() {
@@ -204,15 +235,16 @@ void presentation() {
     present(First_CHILD_ID_COVER+i, S_COVER);
     present(First_CHILD_ID_COVER+i, S_CUSTOM);
   }
-
+  present(BARO_CHILD, S_BARO);
+  present(TEMP_CHILD, S_TEMP);
+  present(HUM_CHILD, S_HUM);
 }
 
 void setup() {
   for (int i = 0; i < MAX_COVERS; i++) {
     sendState(i, First_CHILD_ID_COVER+i);
   }
-  // Request latest time from controller at startup
-  requestTime();
+  metric = getControllerConfig().isMetric;
 }
 
 void loop()
@@ -225,27 +257,9 @@ void loop()
   bool button_jal_down = digitalRead(SwJalDown) == LOW;
   bool emergency = digitalRead(SwEmergency) == LOW; //Current use: in case of rain
 
-  mark.setDisable(emergency);
+  Cover[0].setDisable(emergency);
 
   unsigned long currentTime = millis();
-
-//  //Könnte auch weg, wenn kein Display mehr angeschlossen werden soll
-//  if (currentTime - lastUpdateDisplay > DISPLAY_UPDATE_FREQUENCY) {
-//    lastUpdateDisplay = currentTime;
-//    displayTime();
-//    //updateDisplay();
-//  }
-  // If no time has been received yet, request it every 10 second from controller
-  // When time has been received, request update every hour
-  if ((!timeReceived && (currentTime-lastRequest) > (10UL*1000UL))
-    || (timeReceived && (currentTime-lastRequest) > (60UL*1000UL*60UL))) {
-    // Request time from controller.
-#ifdef MY_DEBUG_LOCAL
-    Serial.println("requesting time");
-#endif
-    requestTime();
-    lastRequest = currentTime;
-  }
 
   // Only send values at a maximum frequency
   if (currentTime - lastSend > SEND_FREQUENCY) {
@@ -260,9 +274,58 @@ void loop()
   #endif
     }
     send(msgRain.set(emergency));
+    
+/*    float temperature = bme.temp(metric);
+    if (isnan(temperature)) {
+#ifdef MY_DEBUG_LOCAL
+    Serial.println("Failed reading temperature");
+#endif
+    } else if (temperature != lastTemp) {
+      // Only send temperature if it changed since the last measurement
+      lastTemp = temperature;
+      send(tempMsg.set(temperature, 1));
+#ifdef MY_DEBUG_LOCAL
+      Serial.print("T: ");
+      Serial.println(temperature);
+#endif
+    }
+
+    float humidity = bme.hum();
+    if (isnan(humidity)) {
+#ifdef MY_DEBUG_LOCAL
+      Serial.println("Failed reading humidity");
+#endif
+    } else if (humidity != lastHum) {
+      // Only send humidity if it changed since the last measurement
+      lastHum = humidity;
+      send(humMsg.set(humidity, 1));
+#ifdef MY_DEBUG
+      Serial.print("H: ");
+      Serial.println(humidity);
+#endif
+    }*/
   }
 
-  //Autostart code
+/*  if (currentTime - lastSendBme > bmeDelayTime) {
+    float pressure_local = bme.pres();                    // Get pressure at current location
+    float pressure = pressure_local/pow((1.0 - ( ALTITUDE / 44330.0 )), 5.255); // Adjust to sea level pressure using user altitude
+    int forecast = sample(pressure);
+    if (pressure != lastPressure) {
+      send(pressureMsg.set(pressure, 2));
+      lastPressure = pressure;
+    }
+
+    if (forecast != lastForecast){
+      send(forecastMsg.set(weather[forecast]));
+      lastForecast = forecast;
+    }
+  }*/
+
+
+
+/*  
+ * Braucht es den Autostart-Teil bei zentraler Steuerung?   
+ //Autostart code
   autostart_check_tick++;
   if(autostart_check_tick >= autostart_check_delay){
     autostart_check_tick = 0;
@@ -282,11 +345,11 @@ void loop()
       }
     }
   }
-
-  State[0]=mark.loop(button_mark_up, button_mark_down);
-  State[1]=jal.loop(button_jal_up, button_jal_down);
-
+*/
+  State[0]=Cover[0].loop(button_mark_up, button_mark_down);
+  State[1]=Cover[1].loop(button_jal_up, button_jal_down);
   for (int i = 0; i < MAX_COVERS; i++) {
+ 
     if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
       sendState(i, First_CHILD_ID_COVER+i);
 /*
@@ -316,9 +379,9 @@ void loop()
 void receive(const MyMessage &message) {
 
   //Diesen Teil später doppeln für den 2. Cover, solange Indexierung nicht läuft
-  if (message.sensor == First_CHILD_ID_COVER) {
+  if (message.sensor >= First_CHILD_ID_COVER && message.sensor <= First_CHILD_ID_COVER+MAX_COVERS) {
       if (message.isAck()) {
-      Serial.println("Ack child1 from gw rec.");
+      Serial.println(F("Ack child1 from gw rec."));
     }
     if (message.type == V_DIMMER) { // This could be M_ACK_VARIABLE or M_SET_VARIABLE
       int val = message.getInt();
@@ -333,11 +396,11 @@ void receive(const MyMessage &message) {
       if (val < 50 && State[message.sensor-First_CHILD_ID_COVER] != 2 && State[message.sensor-First_CHILD_ID_COVER] != 3) {
         //Up
         if (State[message.sensor-First_CHILD_ID_COVER] != 0) {
-          mark.loop(true, false);
+          Cover[message.sensor-First_CHILD_ID_COVER].loop(true, false);
         }
         //bool button_mark_up=true;
         //bool button_mark_down=false;
-        mark.loop(true, false);
+        Cover[message.sensor-First_CHILD_ID_COVER].loop(true, false);
 
 #ifdef MY_DEBUG_LOCAL
     Serial.print("GW Message up: ");
@@ -348,7 +411,7 @@ void receive(const MyMessage &message) {
         //Stop
         bool button_mark_up=false;
         bool button_mark_down=false;
-        mark.loop(button_mark_up, button_mark_down);
+        Cover[message.sensor-First_CHILD_ID_COVER].loop(false, false);
 
 #ifdef MY_DEBUG_LOCAL
     Serial.print("GW Message stop: ");
@@ -358,11 +421,11 @@ void receive(const MyMessage &message) {
       else if (val >50 && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
        //Up
        if (State[message.sensor-First_CHILD_ID_COVER] != 0) {
-          mark.loop(false, true);
+          Cover[message.sensor-First_CHILD_ID_COVER].loop(false, true);
         }
         //bool button_mark_up=false;
         //bool button_mark_down=true;
-        mark.loop(false, true);
+        Cover[message.sensor-First_CHILD_ID_COVER].loop(false, true);
 
 #ifdef MY_DEBUG_LOCAL
     Serial.print("GW Msg down: ");
@@ -371,14 +434,12 @@ void receive(const MyMessage &message) {
       }
     }
 
-
-    //deaktiviert, da FHEM das ohne Änderung der .pm noch nicht senden dürfte...
     if (message.type == V_UP && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
       // Set state to covering up and send it back to the gateway.
-      State[message.sensor-First_CHILD_ID_COVER] = UP;
-      bool button_mark_up=true;
-      bool button_mark_down=false;
-      mark.loop(button_mark_up, button_mark_down);
+      //State[message.sensor-First_CHILD_ID_COVER] = UP;
+      //bool button_mark_up=true;
+      //bool button_mark_down=false;
+      Cover[message.sensor-First_CHILD_ID_COVER].loop(true, false);
       //sendState();
 #ifdef MY_DEBUG_LOCAL
     Serial.print("GW Msg up, C ");
@@ -388,117 +449,182 @@ void receive(const MyMessage &message) {
     }
     if (message.type == V_DOWN && State[message.sensor-First_CHILD_ID_COVER] != 2 && State[message.sensor-First_CHILD_ID_COVER] != 3) {
       // Set state to covering up and send it back to the gateway.
-      State[message.sensor-First_CHILD_ID_COVER] = DOWN;
-      bool button_mark_up=false;
-      bool button_mark_down=true;
-      mark.loop(button_mark_up, button_mark_down);
+      //State[message.sensor-First_CHILD_ID_COVER] = DOWN;
+      //bool button_mark_up=false;
+      //bool button_mark_down=true;
+      Cover[message.sensor-First_CHILD_ID_COVER].loop(false, true);
 
 #ifdef MY_DEBUG_LOCAL
-    Serial.print("GW Msg down, C ");
+    Serial.print(F("GW Msg down, C "));
     Serial.println(message.sensor);
 #endif
     }
 
     if (message.type == V_STOP) {
       // Set state to idle and send it back to the gateway.
-      State[message.sensor-First_CHILD_ID_COVER] = IDLE;
-      bool button_mark_up=false;
-      bool button_mark_down=false;
-      mark.loop(button_mark_up, button_mark_down);
+      //State[message.sensor-First_CHILD_ID_COVER] = IDLE;
+      //bool button_mark_up=false;
+      //bool button_mark_down=false;
+      Cover[message.sensor-First_CHILD_ID_COVER].loop(false, false);
 #ifdef MY_DEBUG_LOCAL
-      Serial.print("GW Msg stop, C ");
+      Serial.print(F("GW Msg stop, C "));
       Serial.println(message.sensor);
 #endif
     }
-  //hier gehört die Doppelung für das 2. Coverr hin
   }
 }
 
-void readDS3231time(byte *second,
-byte *minute,
-byte *hour,
-byte *dayOfWeek,
-byte *dayOfMonth,
-byte *month,
-byte *year)
+/*float getLastPressureSamplesAverage()
 {
-  Wire.beginTransmission(DS3231_I2C_ADDRESS);
-  Wire.write(0); // set DS3231 register pointer to 00h
-  Wire.endTransmission();
-  Wire.requestFrom(DS3231_I2C_ADDRESS, 7);
-  // request seven bytes of data from DS3231 starting from register 00h
-  *second = bcdToDec(Wire.read() & 0x7f);
-  *minute = bcdToDec(Wire.read());
-  *hour = bcdToDec(Wire.read() & 0x3f);
-  *dayOfWeek = bcdToDec(Wire.read());
-  *dayOfMonth = bcdToDec(Wire.read());
-  *month = bcdToDec(Wire.read());
-  *year = bcdToDec(Wire.read());
+  float lastPressureSamplesAverage = 0;
+  for (int i = 0; i < LAST_SAMPLES_COUNT; i++)
+  {
+    lastPressureSamplesAverage += lastPressureSamples[i];
+  }
+  lastPressureSamplesAverage /= LAST_SAMPLES_COUNT;
+
+  return lastPressureSamplesAverage;
 }
 
-void displayTime()
+
+// Algorithm found here
+// http://www.freescale.com/files/sensors/doc/app_note/AN3914.pdf
+// Pressure in hPa -->  forecast done by calculating kPa/h
+int sample(float pressure)
 {
-  byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
-  // retrieve data from DS3231
-  readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month,  &year);
-  // send it to the serial monitor
-  Serial.print(hour, DEC);
-  // convert the byte variable to a decimal number when displayed
-  Serial.print(":");
-  if (minute<10)
-  {
-    Serial.print("0");
-  }
-  Serial.print(minute, DEC);
-  Serial.print(":");
-  if (second<10)
-  {
-    Serial.print("0");
-  }
-  Serial.print(second, DEC);
-  Serial.print(" ");
-  Serial.print(dayOfMonth, DEC);
-  Serial.print("/");
-  Serial.print(month, DEC);
-  Serial.print("/");
-  Serial.println(year, DEC);
-}
+  // Calculate the average of the last n minutes.
+  int index = minuteCount % LAST_SAMPLES_COUNT;
+  lastPressureSamples[index] = pressure;
 
-void receiveTime(unsigned long controllerTime) {
-  // Ok, set incoming time
- #ifdef MY_DEBUG_LOCAL
-  Serial.print("Time value received: ");
-  Serial.println(controllerTime);
-#endif
-  RTC.set(controllerTime); // this sets the RTC to the time from controller - which we do want periodically
-  timeReceived = true;
-}
+  minuteCount++;
+  if (minuteCount > 185)
+  {
+    minuteCount = 6;
+  }
 
-/*void updateDisplay(){
-  tmElements_t tm;
-  RTC.read(tm);
-  // Print date and time
-  lcd.home();
-  lcd.print(tm.Day);
-  lcd.print("/");
-  lcd.print(tm.Month);
-//  lcd.print(" ");
-//  lcd.print(tmYearToCalendar(tm.Year)-2000);
-  lcd.print(" ");
-  printDigits(tm.Hour);
-  lcd.print(":");
-  printDigits(tm.Minute);
-  lcd.print(":");
-  printDigits(tm.Second);
-  // Go to next line and print temperature
-  lcd.setCursor ( 0, 1 );
-  lcd.print("Temp: ");
-  lcd.print(RTC.temperature()/4);
-  lcd.write(223); // Degree-sign
-  lcd.print("C");
-}
-void printDigits(int digits){
-  if(digits < 10)
-    lcd.print('0');
-  lcd.print(digits);
+  if (minuteCount == 5)
+  {
+    pressureAvg = getLastPressureSamplesAverage();
+  }
+  else if (minuteCount == 35)
+  {
+    float lastPressureAvg = getLastPressureSamplesAverage();
+    float change = (lastPressureAvg - pressureAvg) * CONVERSION_FACTOR;
+    if (firstRound) // first time initial 3 hour
+    {
+      dP_dt = change * 2; // note this is for t = 0.5hour
+    }
+    else
+    {
+      dP_dt = change / 1.5; // divide by 1.5 as this is the difference in time from 0 value.
+    }
+  }
+  else if (minuteCount == 65)
+  {
+    float lastPressureAvg = getLastPressureSamplesAverage();
+    float change = (lastPressureAvg - pressureAvg) * CONVERSION_FACTOR;
+    if (firstRound) //first time initial 3 hour
+    {
+      dP_dt = change; //note this is for t = 1 hour
+    }
+    else
+    {
+      dP_dt = change / 2; //divide by 2 as this is the difference in time from 0 value
+    }
+  }
+  else if (minuteCount == 95)
+  {
+    float lastPressureAvg = getLastPressureSamplesAverage();
+    float change = (lastPressureAvg - pressureAvg) * CONVERSION_FACTOR;
+    if (firstRound) // first time initial 3 hour
+    {
+      dP_dt = change / 1.5; // note this is for t = 1.5 hour
+    }
+    else
+    {
+      dP_dt = change / 2.5; // divide by 2.5 as this is the difference in time from 0 value
+    }
+  }
+  else if (minuteCount == 125)
+  {
+    float lastPressureAvg = getLastPressureSamplesAverage();
+    pressureAvg2 = lastPressureAvg; // store for later use.
+    float change = (lastPressureAvg - pressureAvg) * CONVERSION_FACTOR;
+    if (firstRound) // first time initial 3 hour
+    {
+      dP_dt = change / 2; // note this is for t = 2 hour
+    }
+    else
+    {
+      dP_dt = change / 3; // divide by 3 as this is the difference in time from 0 value
+    }
+  }
+  else if (minuteCount == 155)
+  {
+    float lastPressureAvg = getLastPressureSamplesAverage();
+    float change = (lastPressureAvg - pressureAvg) * CONVERSION_FACTOR;
+    if (firstRound) // first time initial 3 hour
+    {
+      dP_dt = change / 2.5; // note this is for t = 2.5 hour
+    }
+    else
+    {
+      dP_dt = change / 3.5; // divide by 3.5 as this is the difference in time from 0 value
+    }
+  }
+  else if (minuteCount == 185)
+  {
+    float lastPressureAvg = getLastPressureSamplesAverage();
+    float change = (lastPressureAvg - pressureAvg) * CONVERSION_FACTOR;
+    if (firstRound) // first time initial 3 hour
+    {
+      dP_dt = change / 3; // note this is for t = 3 hour
+    }
+    else
+    {
+      dP_dt = change / 4; // divide by 4 as this is the difference in time from 0 value
+    }
+    pressureAvg = pressureAvg2; // Equating the pressure at 0 to the pressure at 2 hour after 3 hours have past.
+    firstRound = false; // flag to let you know that this is on the past 3 hour mark. Initialized to 0 outside main loop.
+  }
+
+  int forecast = UNKNOWN;
+  if (minuteCount < 35 && firstRound) //if time is less than 35 min on the first 3 hour interval.
+  {
+    forecast = UNKNOWN;
+  }
+  else if (dP_dt < (-0.25))
+  {
+    forecast = THUNDERSTORM;
+  }
+  else if (dP_dt > 0.25)
+  {
+    forecast = UNSTABLE;
+  }
+  else if ((dP_dt > (-0.25)) && (dP_dt < (-0.05)))
+  {
+    forecast = CLOUDY;
+  }
+  else if ((dP_dt > 0.05) && (dP_dt < 0.25))
+  {
+    forecast = SUNNY;
+  }
+  else if ((dP_dt >(-0.05)) && (dP_dt < 0.05))
+  {
+    forecast = STABLE;
+  }
+  else
+  {
+    forecast = UNKNOWN;
+  }
+
+  // uncomment when debugging
+  //Serial.print(F("Forecast at minute "));
+  //Serial.print(minuteCount);
+  //Serial.print(F(" dP/dt = "));
+  //Serial.print(dP_dt);
+  //Serial.print(F("kPa/h --> "));
+  //Serial.println(weather[forecast]);
+
+  return forecast;
 }*/

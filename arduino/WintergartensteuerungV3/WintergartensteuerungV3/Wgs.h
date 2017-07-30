@@ -13,7 +13,11 @@ class Wgs
   public:
     Wgs();
     void setPins(uint8_t pin_on, uint8_t pin_down, long duration);
+//<<<<<<< rejoe2-Array
+//    Wgs(uint8_t pin_on, uint8_t pin_down, long duration);
+//=======
     Wgs(int pin_on, int pin_down, long duration);
+//>>>>>>> master
     int loop(bool button_disable, bool button_enable);
     void setDisable(boolean b);
     void startMovement(int state);
