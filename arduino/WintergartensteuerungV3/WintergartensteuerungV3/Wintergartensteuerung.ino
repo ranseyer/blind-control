@@ -5,7 +5,7 @@
  */
 
 #define SN "DoubleCover"
-#define SV "0.2.4"
+#define SV "0.2.5"
 
 #define MY_DEBUG
 //#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
@@ -332,9 +332,12 @@ void receive(const MyMessage &message) {
        */
       if (val < 50 && State[message.sensor-First_CHILD_ID_COVER] != 2 && State[message.sensor-First_CHILD_ID_COVER] != 3) {
         //Up
-        bool button_mark_up=true;
-        bool button_mark_down=false;
-        mark.loop(button_mark_up, button_mark_down);
+        if (State[message.sensor-First_CHILD_ID_COVER] != 0) {
+          mark.loop(true, false);
+        }
+        //bool button_mark_up=true;
+        //bool button_mark_down=false;
+        mark.loop(true, false);
 
 #ifdef MY_DEBUG_LOCAL
     Serial.print("GW Message up: ");
@@ -354,9 +357,12 @@ void receive(const MyMessage &message) {
       }
       else if (val >50 && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
        //Up
-       bool button_mark_up=false;
-       bool button_mark_down=true;
-       mark.loop(button_mark_up, button_mark_down);
+       if (State[message.sensor-First_CHILD_ID_COVER] != 0) {
+          mark.loop(false, true);
+        }
+        //bool button_mark_up=false;
+        //bool button_mark_down=true;
+        mark.loop(false, true);
 
 #ifdef MY_DEBUG_LOCAL
     Serial.print("GW Msg down: ");
