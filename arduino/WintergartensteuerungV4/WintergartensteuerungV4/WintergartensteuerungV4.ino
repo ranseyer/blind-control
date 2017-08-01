@@ -23,7 +23,8 @@
 #include <BH1750.h>
 #include <Bounce2.h>
 #include "Wgs.h"
-#include <Wire.h> //warum andere Schreibweise? => Arduino IDE sagt: "Wire.h" bedeutet: liegt im gleichen Verzeichnis <Wire.h> liegt im lib-Verzeichnis. M.E. ist es als <Wire.h> richtig
+#include <Wire.h> //Arduino IDE sagt: "Wire.h" bedeutet: liegt im gleichen Verzeichnis <Wire.h> liegt im lib-Verzeichnis. M.E. ist es als <Wire.h> richtig
+#include <Time.h>
 #include <BME280I2C.h> // From Library Manager, comes with the BME280-lib by Tyler Glenn
 //#define MY_FORECAST
 #include <MySensors.h>
@@ -45,28 +46,37 @@ BME280I2C bme;
 unsigned long lastSendBme = 0;
 //#define SEALEVELPRESSURE_HPA (1013.25)
 
+
+
+
+
 // Input Pins for covers Up/Down
 // UP-Button, DOWN-Button
-const uint8_t INPUT_PINS[][2] = { {3,4}, {7,6}};
-/*const int SwMarkUp = 3;
-const int SwMarkDown = 4;
-// Input Pins for Switch Jalosie Up/Down
-const int SwJalUp = 7;
-const int SwJalDown = 6;*/
-//Notfall
+const uint8_t INPUT_PINS[][2] = { {6,7}, {4,3}};
 const int SwEmergency = 5;
+/*const int SwMarkUp = 6;
+const int SwMarkDown = 7;
+// Input Pins for Switch Jalosie Up/Down
+const int SwJalUp = 4;
+const int SwJalDown = 3;
+*/
+
 
 // Output Pins
 // Cover_ON, Cover_DOWN,
 
 //const unsigned long ON_Time_Max = 16000;
-const uint8_t OUT_INFOS[][2] = {{10,12}, {11,13}} ;
-/*const int JalOn = 10;   // activates relais 2
-const int JalDown = 12; // activates relais1+2
+const uint8_t OUT_INFOS[][2] = {{12,10}, {13,11}} ;
+/* Output Pins
+//dto zum obigen Array
+const int JalOn = 12;   // activates relais 2
+const int JalDown = 10; // activates relais1+2
 //const int JalRevers = 12;
-const int MarkOn = 11; // activates relais 4
-const int MarkDown = 13; // activates relais 3+4
- */
+const int MarkOn = 13; // activates relais 4
+const int MarkDown = 11; // activates relais 3+4*/
+
+
+
 bool UpStates[MAX_COVERS] = {0};
 bool DownStates[MAX_COVERS] = {0};
 bool ReverseStates[MAX_COVERS] = {0};
@@ -130,7 +140,7 @@ MyMessage forecastMsg(BARO_CHILD, V_FORECAST);
 
 bool metric = true;
 float temperature(NAN), humidity(NAN), pressureBme(NAN);
-uint8_t pressureUnit(1);                                          
+uint8_t pressureUnit(1);
 // unit: B000 = Pa, B001 = hPa, B010 = Hg, B011 = atm, B100 = bar, B101 = torr, B110 = N/m^2, B111 = psi
 
 MyMessage tempMsg(TEMP_CHILD, V_TEMP);
@@ -222,7 +232,7 @@ void loop()
       Serial.println(temperature);
 #endif
     }
-    
+
     if (isnan(humidity)) {
 #ifdef MY_DEBUG_LOCAL
       Serial.println("Failed reading humidity");
