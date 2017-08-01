@@ -5,7 +5,7 @@
  */
 
 #define SN "DoubleCover"
-#define SV "0.3.2"
+#define SV "0.3.3"
 
 //#define MY_DEBUG
 //#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
@@ -58,21 +58,22 @@ unsigned long lastSendBme = 0;
    {7,6}
  };
 */
-const int SwMarkUp = 3;
-const int SwMarkDown = 4;
+const int SwMarkUp = 6;
+const int SwMarkDown = 7;
 // Input Pins for Switch Jalosie Up/Down
-const int SwJalUp = 7;
-const int SwJalDown = 6;
+const int SwJalUp = 4;
+const int SwJalDown = 3;
+
 //Notfall
 const int SwEmergency = 5;
 
 // Output Pins
 //dto zum obigen Array
-const int JalOn = 10;   // activates relais 2
-const int JalDown = 12; // activates relais1+2
+const int JalOn = 12;   // activates relais 2
+const int JalDown = 10; // activates relais1+2
 //const int JalRevers = 12;
-const int MarkOn = 11; // activates relais 4
-const int MarkDown = 13; // activates relais 3+4
+const int MarkOn = 13; // activates relais 4
+const int MarkDown = 11; // activates relais 3+4
 
 /*Die States könnten vermutlich auch bool sein (Speicher...)
 und die Cover-spezifischen könnte man in einem Array organisieren
@@ -94,13 +95,10 @@ boolean autostart_done = false;
 /*Allerdings habe ich keine Idee, wie man die Devices
 Innerhalb einer Schleife sinnvoll anlegen kann.
 Vielleicht hat Dein Sohn da eine Idee*/
-//Wgs mark(MarkOn, MarkDown, 55000);
-//Wgs jal(JalOn, JalDown, 55000);
-// Kürzer für Test
 //Array-Test
 Wgs Cover[MAX_COVERS]= {
-  {MarkOn, MarkDown, 16000},
-  {JalOn, JalDown, 16000}
+  {MarkOn, MarkDown, 55000},
+  {JalOn, JalDown, 55000}
 };
 
 BH1750 lightSensor;
