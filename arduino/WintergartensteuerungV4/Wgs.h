@@ -15,18 +15,18 @@ class Wgs
     void setPins(uint8_t pin_on, uint8_t pin_down, long duration);
     Wgs(uint8_t pin_on, uint8_t pin_down, long duration);
     int loop(bool button_disable, bool button_enable);
-    int getState();
+    float getState();
     void setDisable(boolean b);
     void startMovement(int state);
     void stopMovement(int state);
     void debug(String text);
-    void setState(int state); //-1 = unknown. 0-1 = state with 0 = disabled and 1 = completely enabled
+    void setState(float state); //0 = Komplett eingefahren. 1.00f = Komplett ausgefahren. 
   private:
     int _pin_on;
     int _pin_down;
   long _duration;
   bool _disable;
-  int _state;
+  float _state; //0 = Komplett eingefahren. 1.00f = Komplett ausgefahren. 
   long _finish_time;
   long _mute_time;
 };
