@@ -7,8 +7,8 @@
 #define SN "DoubleCover"
 #define SV "0.3.3"
 
-//#define MY_DEBUG
-//#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
+#define MY_DEBUG
+#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
 // Enable RS485 transport layer
 #define MY_RS485
 //#define MY_RS485_HWSERIAL Serial
@@ -16,8 +16,8 @@
 #define MY_RS485_DE_PIN 2
 // Set RS485 baud rate to use
 #define MY_RS485_BAUD_RATE 9600
-#define MY_NODE_ID 111
-#define MY_TRANSPORT_WAIT_READY_MS 2000
+#define MY_NODE_ID 100
+#define MY_TRANSPORT_WAIT_READY_MS 4000
 #include <Arduino.h>
 #include <SPI.h>
 #include <BH1750.h>
