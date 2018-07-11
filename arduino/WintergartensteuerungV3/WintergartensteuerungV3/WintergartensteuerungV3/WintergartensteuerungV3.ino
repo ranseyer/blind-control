@@ -1,32 +1,37 @@
-/*
+ /*
  * Changelog: Kommentare zum weiteren Vorgehen eingefügt
- * BME280: neuer Anlauf
- * Weitestgehend auf Arrays umgebaut
+ * BME280 deaktiviert
+ * Array-Aufruf reingemacht
+
+ * 201807 mit Arduino /16 MHz kompiliert
+
  */
 
 #define SN "DoubleCover"
-#define SV "0.4.0"
+#define SV "0.3.5c"
 
-//#define MY_DEBUG
-//#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
+#define MY_DEBUG
+#define MY_DEBUG_LOCAL //Für lokale Debug-Ausgaben
 // Enable RS485 transport layer
 #define MY_RS485
 //#define MY_RS485_HWSERIAL Serial
 // Define this to enables DE-pin management on defined pin
 #define MY_RS485_DE_PIN 2
 // Set RS485 baud rate to use
-#define MY_RS485_BAUD_RATE 9600
-#define MY_NODE_ID 111
-#define MY_TRANSPORT_WAIT_READY_MS 2000
+#define MY_RS485_BAUD_RATE 19200
+#define MY_NODE_ID 100
+#define MY_TRANSPORT_WAIT_READY_MS 4000
 #include <Arduino.h>
 #include <SPI.h>
 #include <BH1750.h>
 #include <Bounce2.h>
 #include "Wgs.h"
-#include <Wire.h> //Arduino IDE sagt: "Wire.h" bedeutet: liegt im gleichen Verzeichnis <Wire.h> liegt im lib-Verzeichnis. M.E. ist es als <Wire.h> richtig
-#include <Time.h>
+#include "Time.h"
+
+// For RTC
+#include "Wire.h" //warum andere Schreibweise ?
 #include <BME280I2C.h> // From Library Manager, comes with the BME280-lib by Tyler Glenn
-//#define MY_FORECAST
+
 #include <MySensors.h>
 
 //für die millis()-Berechnung, wann wieder gesendet werden soll
@@ -35,7 +40,7 @@ unsigned long lastSend = 0;
 
 #define CHILD_ID_LIGHT 0
 #define CHILD_ID_RAIN 1   // Id of the sensor child
-#define COVER_0_ID 2
+#define First_CHILD_ID_COVER 2
 #define MAX_COVERS 2
 
 #define BARO_CHILD 10
@@ -43,85 +48,122 @@ unsigned long lastSend = 0;
 #define HUM_CHILD 12
 
 BME280I2C bme;
+const float ALTITUDE = 500; // <-- adapt this value to your location's altitude (in m). Use your smartphone GPS to get an accurate value!
 unsigned long lastSendBme = 0;
 //#define SEALEVELPRESSURE_HPA (1013.25)
 
-
-
-
-
-// Input Pins for covers Up/Down
-// UP-Button, DOWN-Button
-const uint8_t INPUT_PINS[][2] = { {6,7}, {4,3}};
-const int SwEmergency = 5;
-/*const int SwMarkUp = 6;
+// Input Pins for Switch Markise Up/Down
+/*Könnte man für jeweils die zu einem Cover gehörenden PINs auch über eine Array-Funktion lösen,
+ damit man dann zur Initialisierung, Abfrage etc. einfach eine Schleife drüberlegen kann.
+ Also etwa so:
+ const int INPUT_PINS[MAX_COVERS] = {
+   {3,4},
+   {7,6}
+ };
+*/
+const int SwMarkUp = 6;
 const int SwMarkDown = 7;
 // Input Pins for Switch Jalosie Up/Down
 const int SwJalUp = 4;
 const int SwJalDown = 3;
-*/
 
+//Notfall
+const int SwEmergency = 5;
 
 // Output Pins
-// Cover_ON, Cover_DOWN,
-
-//const unsigned long ON_Time_Max = 16000;
-const uint8_t OUT_INFOS[][2] = {{12,10}, {13,11}} ;
-/* Output Pins
 //dto zum obigen Array
 const int JalOn = 12;   // activates relais 2
 const int JalDown = 10; // activates relais1+2
 //const int JalRevers = 12;
 const int MarkOn = 13; // activates relais 4
-const int MarkDown = 11; // activates relais 3+4*/
+const int MarkDown = 11; // activates relais 3+4
 
-
-
-bool UpStates[MAX_COVERS] = {0};
-bool DownStates[MAX_COVERS] = {0};
-bool ReverseStates[MAX_COVERS] = {0};
+/*Die States könnten vermutlich auch bool sein (Speicher...)
+und die Cover-spezifischen könnte man in einem Array organisieren
+ */
+bool MarkUpState = 0;
+bool MarkDownState = 0;
+bool JalUpState = 0;
+bool JalDownState = 0;
+bool JalReverseState = 0;
 bool EmergencyState = 0;
 
-Wgs Cover[MAX_COVERS];
-/*for (int i = 0; i < MAX_COVERS; i++) {
-  Cover[i] = OUT_INFOS[i];
-}*/
+//autostart
+const int autostart_time = 9;
+
+const int autostart_check_delay = 200; //in ticks
+int autostart_check_tick = 200; //in ticks
+boolean autostart_done = false;
+
+/*Allerdings habe ich keine Idee, wie man die Devices
+Innerhalb einer Schleife sinnvoll anlegen kann.
+Vielleicht hat Dein Sohn da eine Idee*/
+//Array-Test
+Wgs Cover[MAX_COVERS]= {
+  {MarkOn, MarkDown, 55000},
+  {JalOn, JalDown, 60000}
+};
+
 BH1750 lightSensor;
 uint16_t lastlux = 0;
 
-uint8_t State[MAX_COVERS] = {0};
-uint8_t oldState[MAX_COVERS] = {0};
-uint8_t status[MAX_COVERS] = {0};
-uint8_t oldStatus[MAX_COVERS] = {0};
+byte decToBcd(byte val)
+{
+  return( (val/10*16) + (val%10) );
+}
+// Convert binary coded decimal to normal decimal numbers
+byte bcdToDec(byte val)
+{
+  return( (val/16*10) + (val%16) );
+}
 
-MyMessage upMessage(COVER_0_ID, V_UP);
-MyMessage downMessage(COVER_0_ID, V_DOWN);
-MyMessage stopMessage(COVER_0_ID, V_STOP);
-MyMessage statusMessage(COVER_0_ID, V_STATUS);
+enum State {
+  IDLE,
+  UP, // Window covering. Up.
+  DOWN, // Window covering. Down.
+};
+int State[MAX_COVERS] = {0};
+int oldState[MAX_COVERS] = {0};
+int status[MAX_COVERS] = {0};
+int oldStatus[MAX_COVERS] = {0};
+
+//eine MyMessage-Funktion sollte ausreichen; Rest geht (hoffentlich) über Indexierung
+MyMessage upMessage(First_CHILD_ID_COVER, V_UP);
+MyMessage downMessage(First_CHILD_ID_COVER, V_DOWN);
+MyMessage stopMessage(First_CHILD_ID_COVER, V_STOP);
+MyMessage statusMessage(First_CHILD_ID_COVER, V_STATUS);
 MyMessage msgRain(CHILD_ID_RAIN, V_RAIN);
 MyMessage msgLux(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
 
 /*Auck keine Ahnung, ob Bounce mit einem Anlegen
  * über ein Array klarkäme
  */
-Bounce debounce[MAX_COVERS][1];
-/*Bounce debounceJalDown  = Bounce();
-Bounce debounceMarkUp    = Bounce();
-Bounce debounceMarkDown  = Bounce();*/
-
+Bounce debounceJalUp    = Bounce();
+Bounce debounceJalDown  = Bounce();
 Bounce debounceMarkEmergency  = Bounce();
+Bounce debounceMarkUp    = Bounce();
+Bounce debounceMarkDown  = Bounce();
+
+//bme: Value according to MySensors for forecast accuracy
+unsigned long bmeDelayTime = 60000;
+
+const char *weather[] = { "stable", "sunny", "cloudy", "unstable", "thunderstorm", "unknown" };
+enum FORECAST
+{
+    STABLE = 0,            // "Stable Weather Pattern"
+    SUNNY = 1,            // "Slowly rising Good Weather", "Clear/Sunny "
+    CLOUDY = 2,            // "Slowly falling L-Pressure ", "Cloudy/Rain "
+    UNSTABLE = 3,        // "Quickly rising H-Press",     "Not Stable"
+    THUNDERSTORM = 4,    // "Quickly falling L-Press",    "Thunderstorm"
+    UNKNOWN = 5            // "Unknown (More Time needed)
+};
 
 float lastPressure = -1;
 float lastTemp = -1;
 float lastHum = -1;
+int lastForecast = -1;
 
-#ifdef MY_FORECAST
-//bme: Value according to MySensors for forecast accuracy; do not change
-unsigned long bmeDelayTime = 60000;
-
-const char *weather[] = { "stable", "sunny", "cloudy", "unstable", "thunderstorm", "unknown" };
-uint8_t lastForecast = -1;
-const uint8_t LAST_SAMPLES_COUNT = 5;
+const int LAST_SAMPLES_COUNT = 5;
 float lastPressureSamples[LAST_SAMPLES_COUNT];
 // this CONVERSION_FACTOR is used to convert from Pa to kPa in forecast algorithm
 // get kPa/h be dividing hPa by 10
@@ -135,48 +177,66 @@ float pressureAvg;
 float pressureAvg2;
 
 float dP_dt;
-MyMessage forecastMsg(BARO_CHILD, V_FORECAST);
-#endif
-
 bool metric = true;
-float temperature(NAN), humidity(NAN), pressureBme(NAN);
-uint8_t pressureUnit(1);
-// unit: B000 = Pa, B001 = hPa, B010 = Hg, B011 = atm, B100 = bar, B101 = torr, B110 = N/m^2, B111 = psi
-
 MyMessage tempMsg(TEMP_CHILD, V_TEMP);
 MyMessage pressureMsg(BARO_CHILD, V_PRESSURE);
+MyMessage forecastMsg(BARO_CHILD, V_FORECAST);
 MyMessage humMsg(HUM_CHILD, V_HUM);
+
+void sendState(int val1, int sensorID) {
+  // Send current state and status to gateway.
+  send(upMessage.setSensor(sensorID).set(State[val1] == UP));
+  send(downMessage.setSensor(sensorID).set(State[val1] == DOWN));
+  send(stopMessage.setSensor(sensorID).set(State[val1] == IDLE));
+  send(statusMessage.setSensor(sensorID).set(status[val1]));
+}
 
 void before()
 {
+  /*
+   * Mal exemplarisch für Markise umsortiert, wie man das im Ramhen eines Arrays aufrufen würde
+   */
+
   // Initialize In-/Outputs
-  for (uint8_t i = 0; i < MAX_COVERS; i++) {
-  Cover[i] = Wgs(OUT_INFOS[i][0],OUT_INFOS[i][1],16000);
-    for (uint8_t j=0; j<2; j++) {
-      pinMode(OUT_INFOS[i][j], OUTPUT);
-      digitalWrite(OUT_INFOS[i][j], HIGH);
-      pinMode(INPUT_PINS[i][j], INPUT_PULLUP);
-      debounce[i][j] = Bounce();
-      debounce[i][j].attach(INPUT_PINS[i][j]);
-      debounce[i][j].interval(5);
-    }
-  }
+  pinMode(MarkOn, OUTPUT);
+  pinMode(MarkDown, OUTPUT);
+  digitalWrite(MarkOn, HIGH);
+  digitalWrite(MarkDown, HIGH);
+  pinMode(JalOn, OUTPUT);
+  pinMode(JalDown, OUTPUT);
+  digitalWrite(JalOn, HIGH);
+  digitalWrite(JalDown, HIGH);
+
+  pinMode(SwJalUp, INPUT_PULLUP);
+  pinMode(SwJalDown, INPUT_PULLUP);
+  pinMode(SwMarkUp, INPUT_PULLUP);
+  pinMode(SwMarkDown, INPUT_PULLUP);
   pinMode(SwEmergency, INPUT_PULLUP);
+
+  // After setting up the button, setup debouncer
+  debounceMarkUp.attach(SwMarkUp);
+  debounceMarkUp.interval(5);
+  debounceMarkDown.attach(SwMarkDown);
+  debounceMarkDown.interval(5);
+  debounceJalUp.attach(SwJalUp);
+  debounceJalUp.interval(5);
+  debounceJalDown.attach(SwJalDown);
+  debounceJalDown.interval(5);
   debounceMarkEmergency.attach(SwEmergency);
   debounceMarkEmergency.interval(5);
 
   Wire.begin();
   lightSensor.begin();
-  bme.begin();
+  //bme.begin();
 }
 
 void presentation() {
   sendSketchInfo(SN, SV);
   present(CHILD_ID_LIGHT, S_LIGHT_LEVEL);
   present(CHILD_ID_RAIN, S_RAIN);
-  for (uint8_t i = 0; i < MAX_COVERS; i++) {
-    present(COVER_0_ID+i, S_COVER);
-    present(COVER_0_ID+i, S_CUSTOM);
+  for (int i = 0; i < MAX_COVERS; i++) {
+    present(First_CHILD_ID_COVER+i, S_COVER);
+    present(First_CHILD_ID_COVER+i, S_CUSTOM);
   }
   present(BARO_CHILD, S_BARO);
   present(TEMP_CHILD, S_TEMP);
@@ -184,21 +244,20 @@ void presentation() {
 }
 
 void setup() {
-  for (uint8_t i = 0; i < MAX_COVERS; i++) {
-    sendState(i, COVER_0_ID+i);
+  for (int i = 0; i < MAX_COVERS; i++) {
+    sendState(i, First_CHILD_ID_COVER+i);
   }
   metric = getControllerConfig().isMetric;
 }
 
 void loop()
 {
-  bool button[MAX_COVERS-1][1];
-  for (uint8_t i = 0; i < MAX_COVERS; i++) {
-    for (uint8_t j=0; j<2; j++) {
-      button[i][j] = digitalRead(INPUT_PINS[i][j]) == LOW;
-    }
-  }
+  //Serial.print("Loop/");
 
+  bool button_mark_up = digitalRead(SwMarkUp) == LOW;
+  bool button_mark_down = digitalRead(SwMarkDown) == LOW;
+  bool button_jal_up = digitalRead(SwJalUp) == LOW;
+  bool button_jal_down = digitalRead(SwJalDown) == LOW;
   bool emergency = digitalRead(SwEmergency) == LOW; //Current use: in case of rain
 
   Cover[0].setDisable(emergency);
@@ -212,16 +271,17 @@ void loop()
     if (lux != lastlux) {
       send(msgLux.set(lux));
       lastlux = lux;
-#ifdef MY_DEBUG_LOCAL
+  #ifdef MY_DEBUG_LOCAL
       Serial.print("lux:");
       Serial.println(lux);
-#endif
+  #endif
     }
     send(msgRain.set(emergency));
-    bme.read(pressureBme, temperature, humidity, metric, pressureUnit); //Parameters: (float& pressure, float& temp, float& humidity, bool celsius = false, uint8_t pressureUnit = 0x0)
+
+/*    float temperature = bme.temp(metric);
     if (isnan(temperature)) {
 #ifdef MY_DEBUG_LOCAL
-      Serial.println("Failed reading temperature");
+    Serial.println("Failed reading temperature");
 #endif
     } else if (temperature != lastTemp) {
       // Only send temperature if it changed since the last measurement
@@ -233,50 +293,68 @@ void loop()
 #endif
     }
 
+    float humidity = bme.hum();
     if (isnan(humidity)) {
 #ifdef MY_DEBUG_LOCAL
       Serial.println("Failed reading humidity");
 #endif
     } else if (humidity != lastHum) {
-    // Only send humidity if it changed since the last measurement
+      // Only send humidity if it changed since the last measurement
       lastHum = humidity;
       send(humMsg.set(humidity, 1));
 #ifdef MY_DEBUG
       Serial.print("H: ");
       Serial.println(humidity);
 #endif
-    }
-#ifndef MY_FORECAST
-    if (isnan(pressureBme)) {
-#ifdef MY_DEBUG_LOCAL
-      Serial.println("Failed reading pressure");
-#endif
-    if (pressureBme != lastPressure) {
-      send(pressureMsg.set(pressureBme, 2));
-      lastPressure = pressureBme;
-    }
-#endif
+    }*/
   }
 
-#ifdef MY_FORECAST
-  if (currentTime - lastSendBme > bmeDelayTime) {
-    int forecast = sample(pressureBme);
-    if (pressureBme != lastPressure) {
-      send(pressureMsg.set(pressureBme, 2));
-      lastPressure = pressureBme;
+/*  if (currentTime - lastSendBme > bmeDelayTime) {
+    float pressure_local = bme.pres();                    // Get pressure at current location
+    float pressure = pressure_local/pow((1.0 - ( ALTITUDE / 44330.0 )), 5.255); // Adjust to sea level pressure using user altitude
+    int forecast = sample(pressure);
+    if (pressure != lastPressure) {
+      send(pressureMsg.set(pressure, 2));
+      lastPressure = pressure;
     }
+
     if (forecast != lastForecast){
       send(forecastMsg.set(weather[forecast]));
       lastForecast = forecast;
     }
-#endif
-  }
+  }*/
 
-  //State[0]=Cover[0].loop(button_mark_up, button_mark_down);
-  for (uint8_t i = 0; i < MAX_COVERS; i++) {
-    State[i]=Cover[i].loop(button[i][0],button[i][1] );
+
+
+/*
+ * Braucht es den Autostart-Teil bei zentraler Steuerung?
+ //Autostart code
+  autostart_check_tick++;
+  if(autostart_check_tick >= autostart_check_delay){
+    autostart_check_tick = 0;
+
+    // Darf das mehrfach sein ?
+    byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
+    readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);
+
+    if(autostart_done){ //Already done
+      if(hour > autostart_time){
+        autostart_done = false;
+      }
+    }else{
+      if(hour == autostart_time &! emergency){
+        button_mark_down = true;
+        autostart_done = true;
+      }
+    }
+  }
+*/
+  State[0]=Cover[0].loop(button_mark_up, button_mark_down);
+  State[1]=Cover[1].loop(button_jal_up, button_jal_down);
+  for (int i = 0; i < MAX_COVERS; i++) {
+
     if ( State[i] != oldState[i]||status[i] != oldStatus[i]) {
-      sendState(i, COVER_0_ID+i);
+      sendState(i, First_CHILD_ID_COVER+i);
 /*
  * Hier könnte man einen Timer einfügen, der die Zeit erfaßt,
  * die das jeweilige Cover fährt und daraus einen %-Wert errechnen.
@@ -293,7 +371,7 @@ void loop()
       oldStatus[i] = status[i];
 #ifdef MY_DEBUG_LOCAL
       Serial.print("Button press C ");
-      Serial.println(i+COVER_0_ID);
+      Serial.println(i+First_CHILD_ID_COVER);
       Serial.print("Return: ");
       Serial.println(State[i]);
 #endif
@@ -302,11 +380,11 @@ void loop()
 }
 
 void receive(const MyMessage &message) {
-  if (message.sensor >= COVER_0_ID && message.sensor <= COVER_0_ID+MAX_COVERS) {
-    if (message.isAck()) {
-#ifdef MY_DEBUG_LOCAL
-    Serial.println(F("Ack child1 from gw rec."));
-#endif
+
+  //Diesen Teil später doppeln für den 2. Cover, solange Indexierung nicht läuft
+  if (message.sensor >= First_CHILD_ID_COVER && message.sensor <= First_CHILD_ID_COVER+MAX_COVERS) {
+      if (message.isAck()) {
+      Serial.println(F("Ack child1 from gw rec."));
     }
     if (message.type == V_DIMMER) { // This could be M_ACK_VARIABLE or M_SET_VARIABLE
       int val = message.getInt();
@@ -318,55 +396,79 @@ void receive(const MyMessage &message) {
           const int STATE_DISABLED = 3;
           const int STATE_ENABLING = 4;
        */
-      if (val < 50 && State[message.sensor-COVER_0_ID] != 2 && State[message.sensor-COVER_0_ID] != 3) {
-      //Down
-        if (State[message.sensor-COVER_0_ID] != 0) {
-          Cover[message.sensor-COVER_0_ID].loop(true, false);
+      if (val < 50 && State[message.sensor-First_CHILD_ID_COVER] != 2 && State[message.sensor-First_CHILD_ID_COVER] != 3) {
+        //Up
+        if (State[message.sensor-First_CHILD_ID_COVER] != 0) {
+          Cover[message.sensor-First_CHILD_ID_COVER].loop(true, false);
         }
-        Cover[message.sensor-COVER_0_ID].loop(true, false);
+        //bool button_mark_up=true;
+        //bool button_mark_down=false;
+        Cover[message.sensor-First_CHILD_ID_COVER].loop(true, false);
+
 #ifdef MY_DEBUG_LOCAL
-        Serial.print("GW Message up: ");
-        Serial.println(val);
+    Serial.print("GW Message up: ");
+    Serial.println(val);
 #endif
       }
       else if (val == 50) {
-      //Stop
-        Cover[message.sensor-COVER_0_ID].loop(false, false);
+        //Stop
+        bool button_mark_up=false;
+        bool button_mark_down=false;
+        Cover[message.sensor-First_CHILD_ID_COVER].loop(false, false);
+
 #ifdef MY_DEBUG_LOCAL
-        Serial.print("GW Message stop: ");
-        Serial.println(val);
+    Serial.print("GW Message stop: ");
+    Serial.println(val);
 #endif
       }
-      else if (val >50 && State[message.sensor-COVER_0_ID] != 1 && State[message.sensor-COVER_0_ID] != 4) {
-      //Up
-        if (State[message.sensor-COVER_0_ID] != 0) {
-          Cover[message.sensor-COVER_0_ID].loop(false, true);
+      else if (val >50 && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
+       //Up
+       if (State[message.sensor-First_CHILD_ID_COVER] != 0) {
+          Cover[message.sensor-First_CHILD_ID_COVER].loop(false, true);
         }
-        Cover[message.sensor-COVER_0_ID].loop(false, true);
+        //bool button_mark_up=false;
+        //bool button_mark_down=true;
+        Cover[message.sensor-First_CHILD_ID_COVER].loop(false, true);
+
 #ifdef MY_DEBUG_LOCAL
-        Serial.print("GW Msg down: ");
-        Serial.println(val);
+    Serial.print("GW Msg down: ");
+    Serial.println(val);
 #endif
       }
     }
 
-    if (message.type == V_UP && State[message.sensor-COVER_0_ID] != 1 && State[message.sensor-COVER_0_ID] != 4) {
-      Cover[message.sensor-COVER_0_ID].loop(true, false);
+    if (message.type == V_UP && State[message.sensor-First_CHILD_ID_COVER] != 1 && State[message.sensor-First_CHILD_ID_COVER] != 4) {
+      // Set state to covering up and send it back to the gateway.
+      //State[message.sensor-First_CHILD_ID_COVER] = UP;
+      //bool button_mark_up=true;
+      //bool button_mark_down=false;
+      Cover[message.sensor-First_CHILD_ID_COVER].loop(true, false);
       //sendState();
 #ifdef MY_DEBUG_LOCAL
-      Serial.print("GW Msg up, C ");
-      Serial.println(message.sensor);
+    Serial.print("GW Msg up, C ");
+    Serial.println(message.sensor);
 #endif
+
     }
-    if (message.type == V_DOWN && State[message.sensor-COVER_0_ID] != 2 && State[message.sensor-COVER_0_ID] != 3) {
-      Cover[message.sensor-COVER_0_ID].loop(false, true);
+    if (message.type == V_DOWN && State[message.sensor-First_CHILD_ID_COVER] != 2 && State[message.sensor-First_CHILD_ID_COVER] != 3) {
+      // Set state to covering up and send it back to the gateway.
+      //State[message.sensor-First_CHILD_ID_COVER] = DOWN;
+      //bool button_mark_up=false;
+      //bool button_mark_down=true;
+      Cover[message.sensor-First_CHILD_ID_COVER].loop(false, true);
+
 #ifdef MY_DEBUG_LOCAL
-      Serial.print(F("GW Msg down, C "));
-      Serial.println(message.sensor);
+    Serial.print(F("GW Msg down, C "));
+    Serial.println(message.sensor);
 #endif
     }
+
     if (message.type == V_STOP) {
-      Cover[message.sensor-COVER_0_ID].loop(false, false);
+      // Set state to idle and send it back to the gateway.
+      //State[message.sensor-First_CHILD_ID_COVER] = IDLE;
+      //bool button_mark_up=false;
+      //bool button_mark_down=false;
+      Cover[message.sensor-First_CHILD_ID_COVER].loop(false, false);
 #ifdef MY_DEBUG_LOCAL
       Serial.print(F("GW Msg stop, C "));
       Serial.println(message.sensor);
@@ -375,42 +477,7 @@ void receive(const MyMessage &message) {
   }
 }
 
-enum State {
-  IDLE,
-  UP, // Window covering. Up.
-  DOWN, // Window covering. Down.
-};
-
-void sendState(int val1, int sensorID) {
-  // Send current state and status to gateway.
-  send(upMessage.setSensor(sensorID).set(State[val1] == UP));
-  send(downMessage.setSensor(sensorID).set(State[val1] == DOWN));
-  send(stopMessage.setSensor(sensorID).set(State[val1] == IDLE));
-  send(statusMessage.setSensor(sensorID).set(status[val1]));
-}
-
-byte decToBcd(byte val)
-{
-  return( (val/10*16) + (val%10) );
-}
-// Convert binary coded decimal to normal decimal numbers
-byte bcdToDec(byte val)
-{
-  return( (val/16*10) + (val%16) );
-}
-
-#ifdef MY_FORECAST
-enum FORECAST
-{
-    STABLE = 0,            // "Stable Weather Pattern"
-    SUNNY = 1,            // "Slowly rising Good Weather", "Clear/Sunny "
-    CLOUDY = 2,            // "Slowly falling L-Pressure ", "Cloudy/Rain "
-    UNSTABLE = 3,        // "Quickly rising H-Press",     "Not Stable"
-    THUNDERSTORM = 4,    // "Quickly falling L-Press",    "Thunderstorm"
-    UNKNOWN = 5            // "Unknown (More Time needed)
-};
-
-float getLastPressureSamplesAverage()
+/*float getLastPressureSamplesAverage()
 {
   float lastPressureSamplesAverage = 0;
   for (int i = 0; i < LAST_SAMPLES_COUNT; i++)
@@ -563,5 +630,4 @@ int sample(float pressure)
   //Serial.println(weather[forecast]);
 
   return forecast;
-}
-#endif
+}*/
